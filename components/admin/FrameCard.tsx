@@ -2,7 +2,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import Image from 'next/image';
 import { Frame } from '@/types';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -16,7 +15,7 @@ interface FrameCardProps {
   onDelete:  (id: string) => Promise<void>;
 }
 
-export const FrameCard:  React.FC<FrameCardProps> = ({ frame, onUpdate, onDelete }) => {
+export const FrameCard: React.FC<FrameCardProps> = ({ frame, onUpdate, onDelete }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(frame.name);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -48,12 +47,12 @@ export const FrameCard:  React.FC<FrameCardProps> = ({ frame, onUpdate, onDelete
 
     setLoading(true);
     try {
-      await onUpdate(frame.id, { name: editName.trim() });
+      await onUpdate(frame.id, { name: editName. trim() });
       toast.success('Frame name updated successfully');
       setIsEditing(false);
     } catch (error) {
       console.error('Error updating frame:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to update frame name');
+      toast.error(error instanceof Error ? error.message :  'Failed to update frame name');
     } finally {
       setLoading(false);
     }
@@ -80,15 +79,14 @@ export const FrameCard:  React.FC<FrameCardProps> = ({ frame, onUpdate, onDelete
   return (
     <>
       <Card hover className="overflow-hidden">
-        {/* Frame Image */}
-        <div className="relative w-full h-48 bg-gray-100">
-          <Image
-            src={frame.thumbnail_url || frame.cloudinary_url}
-            alt={frame.name}
-            fill
-            className="object-contain"
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-          />
+        {/* Frame Image - FIXED: Support both portrait AND landscape frames */}
+        <div className="relative w-full bg-gray-100 p-2 flex items-center justify-center" style={{ minHeight: '150px' }}>
+            <img
+                src={ frame.cloudinary_url}
+                alt={frame.name}
+                className="max-w-full h-auto object-contain"
+                style={{ maxHeight:  '500px', maxWidth: '300px' }} 
+            />
           
           {/* Status Badge */}
           <div className="absolute top-2 right-2">
@@ -189,7 +187,7 @@ export const FrameCard:  React.FC<FrameCardProps> = ({ frame, onUpdate, onDelete
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M19 7l-. 867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                   />
                 </svg>
               </Button>
