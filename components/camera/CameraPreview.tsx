@@ -107,19 +107,16 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
     const FRAME_WIDTH = frameDimensions.width;
     const FRAME_HEIGHT = frameDimensions.height;
     
-    // Convert percentages to actual pixels
+    // ✅ CRITICAL FIX: Convert percentages to pixels FIRST, then calculate aspect ratio
     const slotPixelWidth = (currentSlot.width / 100) * FRAME_WIDTH;
-    // Use admin width/height as ratio to get landscape aspect
-    const ratioFromAdmin = (currentSlot.width || 1) / (currentSlot.height || 1);
-    const slotPixelHeight = Math.max(1, Math.round(slotPixelWidth / ratioFromAdmin));
-    const slotAspectRatio = ratioFromAdmin;
+    const slotPixelHeight = (currentSlot.height / 100) * FRAME_HEIGHT;
+    const slotAspectRatio = slotPixelWidth / slotPixelHeight;
 
     console.log('📐 Bounding Box Calculation:');
     console.log('  Slot from DB:', currentSlot.width, '% ×', currentSlot.height, '%');
     console.log('  Frame dimensions:', FRAME_WIDTH, '×', FRAME_HEIGHT);
-    console.log('  Ratio from admin:', ratioFromAdmin.toFixed(3));
-    console.log('  Box dimensions:', slotPixelWidth.toFixed(0), '×', slotPixelHeight.toFixed(0));
-    console.log('  Aspect ratio:', slotAspectRatio.toFixed(3), slotAspectRatio > 1 ? '(landscape)' : '(portrait)');
+    console.log('  Slot pixels:', slotPixelWidth.toFixed(0), '×', slotPixelHeight.toFixed(0));
+    console.log('  Aspect ratio:', slotAspectRatio.toFixed(3), slotAspectRatio > 1 ? '(landscape ✅)' : '(portrait ❌)');
 
     // Calculate box dimensions maintaining CORRECT aspect ratio
     let boxWidth: number;
@@ -195,7 +192,14 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
 
       // ✅ CRITICAL FIX:   Use slot aspect ratio to set canvas dimensions
       // This ensures captured image has SAME aspect ratio as slot
-      const slotAspectRatio = currentSlot.width / currentSlot.height;
+      // ✅ CRITICAL FIX: Calculate aspect ratio from pixels, not percentages
+      // We need to know frame dimensions to calculate correct aspect ratio
+      const FRAME_WIDTH = frameDimensions?.width || 1088;  // Fallback to typical frame size
+      const FRAME_HEIGHT = frameDimensions?.height || 3264;
+      
+      const slotPixelWidth = (currentSlot.width / 100) * FRAME_WIDTH;
+      const slotPixelHeight = (currentSlot.height / 100) * FRAME_HEIGHT;
+      const slotAspectRatio = slotPixelWidth / slotPixelHeight;
       
       // Set canvas width based on quality, height based on aspect ratio
       const CAPTURE_WIDTH = 1000;  // Good quality
@@ -206,18 +210,20 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
 
       console.log('📸 Capture Info: ');
       console.log('  Slot:  ', currentSlot.width, '% ×', currentSlot.height, '%');
-      console.log('  Slot Aspect Ratio:', slotAspectRatio. toFixed(3));
-      console.log('  Green Box:', cropWidth. toFixed(0), '×', cropHeight.toFixed(0), 'px');
+      console.log('  Frame dimensions:', FRAME_WIDTH, '×', FRAME_HEIGHT);
+      console.log('  Slot pixels:', slotPixelWidth.toFixed(0), '×', slotPixelHeight.toFixed(0));
+      console.log('  Slot Aspect Ratio:', slotAspectRatio.toFixed(3));
+      console.log('  Green Box:', cropWidth.toFixed(0), '×', cropHeight.toFixed(0), 'px');
       console.log('  Canvas:', canvas.width, '×', canvas.height);
-      console.log('  Canvas Aspect Ratio:', (canvas. width / canvas.height).toFixed(3));
-      console.log('  Match:', Math.abs(slotAspectRatio - (canvas.width / canvas.height)) < 0.01 ? '✅' : '⚠️ MISMATCH!');
+      console.log('  Canvas Aspect Ratio:', (canvas.width / canvas.height).toFixed(3));
+      console.log('  Match:', Math.abs(slotAspectRatio - (canvas.width / canvas.height)) < 0.01 ? 'YES' : 'NO - MISMATCH!');
 
       // Load full webcam image
       const img = new Image();
       img.onload = () => {
         // Calculate scale from webcam resolution to container
         const scaleX = img.width / containerWidth;
-        const scaleY = img.  height / containerHeight;
+        const scaleY = img.height / containerHeight;
 
         // Draw the area inside green box to canvas
         // Scale it to fit canvas while maintaining aspect ratio
@@ -236,10 +242,10 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
         // Convert to base64
         const croppedImage = canvas.toDataURL('image/jpeg', 0.92);
         
-        console.log('✅ Photo captured! ');
+        console.log('Photo captured successfully');
         console.log('  Final aspect ratio:', (canvas.width / canvas.height).toFixed(3));
-        console.log('  Expected:', slotAspectRatio. toFixed(3));
-        console.log('  Difference:', Math.  abs(slotAspectRatio - (canvas.width / canvas.height)).toFixed(4));
+        console.log('  Expected:', slotAspectRatio.toFixed(3));
+        console.log('  Difference:', Math.abs(slotAspectRatio - (canvas.width / canvas.height)).toFixed(4));
         
         onCapture(croppedImage);
       };
