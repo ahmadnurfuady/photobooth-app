@@ -38,7 +38,7 @@ export async function GET(request:  NextRequest) {
   }
 }
 
-// POST - Create new frame (WITH photo_slots)
+// POST - Create new frame (WITH photo_slots AND frame_config)
 export async function POST(request: NextRequest) {
   try {
     
@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
     const name = formData.get('name') as string;
     const image = formData.get('image') as string; // base64
     const photoSlotsString = formData.get('photoSlots') as string;
+    const frameConfigString = formData.get('frameConfig') as string;
 
     if (!name || !image) {
       return NextResponse.json(
@@ -62,6 +63,15 @@ export async function POST(request: NextRequest) {
     } catch (e) {
       console.error('Error parsing photo slots:', e);
       photoSlots = null;
+    }
+
+    // Parse frame config
+    let frameConfig;
+    try {
+      frameConfig = frameConfigString ? JSON.parse(frameConfigString) : null;
+    } catch (e) {
+      console.error('Error parsing frame config:', e);
+      frameConfig = null;
     }
 
     // Upload to Cloudinary
@@ -83,6 +93,7 @@ export async function POST(request: NextRequest) {
         thumbnail_url: thumbnailUrl,
         is_active: true,
         photo_slots: photoSlots, // Save photo slots
+        frame_config: frameConfig, // Save frame config
       })
       .select()
       .single();
