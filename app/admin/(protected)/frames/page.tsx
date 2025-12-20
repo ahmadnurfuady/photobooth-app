@@ -41,6 +41,7 @@ export default function FrameManagementPage() {
     name: string;
     imageFile: File;
     photoSlots: any[];
+    frameConfig: any;
   }) => {
     const formData = new FormData();
     formData.append('name', frameData.name);
@@ -55,7 +56,8 @@ export default function FrameManagementPage() {
 
     const base64Image = await base64Promise;
     formData.append('image', base64Image);
-    formData.append('photoSlots', JSON.stringify(frameData.photoSlots)); // NEW
+    formData.append('photoSlots', JSON.stringify(frameData.photoSlots));
+    formData.append('frameConfig', JSON.stringify(frameData.frameConfig)); // NEW
 
     const response = await fetch('/api/frames', {
       method: 'POST',

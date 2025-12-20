@@ -3,7 +3,8 @@
 
 import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/Button';
-import { PhotoSlot } from '@/types';
+import { PhotoSlot, FrameConfig } from '@/types';
+import { FRAME_PRESETS, generateDefaultSlots, getPreset } from '@/lib/framePresets';
 import toast from 'react-hot-toast';
 
 interface FrameUploadModalProps {
@@ -13,6 +14,7 @@ interface FrameUploadModalProps {
     name: string;
     imageFile: File;
     photoSlots: PhotoSlot[];
+    frameConfig: FrameConfig;
   }) => Promise<void>;
 }
 
@@ -29,12 +31,14 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   
-  // Default photo slots (will be adjusted by admin)
-  const [photoSlots, setPhotoSlots] = useState<PhotoSlot[]>([
-    { id: 1, x: 7, y: 6, width: 35, height: 28 },   // Top slot
-    { id: 2, x: 7, y: 36, width: 35, height:  28 },  // Middle slot
-    { id: 3, x: 7, y: 66, width: 35, height: 28 },  // Bottom slot
-  ]);
+  // Preset selection (default to 3 photos)
+  const [selectedPhotoCount, setSelectedPhotoCount] = useState<1 | 2 | 3 | 4>(3);
+  const selectedPreset = FRAME_PRESETS[selectedPhotoCount];
+  
+  // Photo slots (will be auto-generated based on preset)
+  const [photoSlots, setPhotoSlots] = useState<PhotoSlot[]>(
+    generateDefaultSlots(FRAME_PRESETS[3])
+  );
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -54,6 +58,14 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
     setSelectedFile(file);
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
+  };
+
+  // Handle photo count change - regenerate slots with new preset
+  const handlePhotoCountChange = (count: 1 | 2 | 3 | 4) => {
+    setSelectedPhotoCount(count);
+    const preset = FRAME_PRESETS[count];
+    const newSlots = generateDefaultSlots(preset);
+    setPhotoSlots(newSlots);
   };
 
   const handleNext = () => {
@@ -79,10 +91,18 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
 
     setLoading(true);
     try {
+      const frameConfig: FrameConfig = {
+        photo_count: selectedPhotoCount,
+        layout: selectedPreset.layout,
+        aspect_ratio: selectedPreset.aspectRatio,
+        default_slot_size: selectedPreset.defaultSlotSize,
+      };
+
       await onUpload({
         name:  frameName,
         imageFile: selectedFile,
         photoSlots,
+        frameConfig,
       });
 
       toast.success('Frame uploaded successfully!');
@@ -100,15 +120,12 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
     setFrameName('');
     setSelectedFile(null);
     setPreviewUrl(null);
-    setPhotoSlots([
-      { id: 1, x: 7, y: 6, width: 35, height:  28 },
-      { id: 2, x: 7, y: 36, width: 35, height:  28 },
-      { id: 3, x: 7, y: 66, width:  35, height: 28 },
-    ]);
+    setSelectedPhotoCount(3);
+    setPhotoSlots(generateDefaultSlots(FRAME_PRESETS[3]));
     onClose();
   };
 
-  // Drag & Resize Handlers
+  // Drag & Resize Handlers with ASPECT RATIO LOCKING
   const handleMouseDown = (slotId: number, isResize: boolean, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -130,6 +147,7 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
     const deltaY = ((e.clientY - dragStart.y) / container.height) * 100;
 
     if (dragging !== null) {
+      // Dragging (position change only)
       setPhotoSlots(prev =>
         prev.map(slot =>
           slot.id === dragging
@@ -145,16 +163,29 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
     }
 
     if (resizing !== null) {
+      // Resizing with LOCKED ASPECT RATIO
       setPhotoSlots(prev =>
-        prev.map(slot =>
-          slot.id === resizing
-            ? {
-                ...slot,
-                width: Math.max(10, Math.min(100 - slot.x, slot.width + deltaX)),
-                height: Math.max(10, Math.min(100 - slot.y, slot.height + deltaY)),
-              }
-            : slot
-        )
+        prev.map(slot => {
+          if (slot.id !== resizing) return slot;
+
+          // Calculate new width based on horizontal drag
+          const newWidth = Math.max(10, Math.min(100 - slot.x, slot.width + deltaX));
+          
+          // Calculate new height based on LOCKED aspect ratio
+          const lockedAspectRatio = selectedPreset.aspectRatio;
+          const newHeight = newWidth / lockedAspectRatio;
+          
+          // Ensure height doesn't exceed bounds
+          const maxHeight = 100 - slot.y;
+          const finalHeight = Math.min(newHeight, maxHeight);
+          const finalWidth = finalHeight * lockedAspectRatio;
+
+          return {
+            ...slot,
+            width: finalWidth,
+            height: finalHeight,
+          };
+        })
       );
       setDragStart({ x: e.clientX, y: e.clientY });
     }
@@ -202,6 +233,29 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter frame name"
                 />
+              </div>
+
+              {/* Photo Count Selection - NEW! */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Photo Layout
+                </label>
+                <select
+                  value={selectedPhotoCount}
+                  onChange={(e) => handlePhotoCountChange(Number(e.target.value) as 1 | 2 | 3 | 4)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  {Object.values(FRAME_PRESETS).map((preset) => (
+                    <option key={preset.photoCount} value={preset.photoCount}>
+                      {preset.name} - {preset.description} (Aspect Ratio: {preset.aspectRatio.toFixed(2)})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Selected: <strong>{selectedPreset.name}</strong> - 
+                  Aspect ratio <strong>{selectedPreset.aspectRatio.toFixed(3)}</strong> 
+                  ({selectedPreset.aspectRatio > 1 ? 'Landscape' : 'Portrait'})
+                </p>
               </div>
 
               {/* Frame Image Upload */}
@@ -256,9 +310,21 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
           ) : (
             // STEP 2: Position Photo Slots
             <div className="space-y-4">
+              {/* Instructions with Preset Info */}
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="mb-2">
+                  <p className="text-sm font-semibold text-blue-900">
+                    Selected Preset: {selectedPreset.name}
+                  </p>
+                  <p className="text-xs text-blue-700">
+                    Aspect Ratio: <strong>{selectedPreset.aspectRatio.toFixed(3)}</strong> 
+                    ({selectedPreset.aspectRatio > 1 ? 'Landscape' : 'Portrait'}) - 
+                    {' '}{selectedPhotoCount} photo{selectedPhotoCount > 1 ? 's' : ''}
+                  </p>
+                </div>
                 <p className="text-sm text-blue-800">
-                  <strong>Instructions:</strong> Drag the boxes to position them.  Drag the bottom-right corner to resize.  Adjust to match the photo areas in your frame.
+                  <strong>Instructions:</strong> Drag the boxes to position them. Drag the bottom-right corner to resize. 
+                  <strong> Aspect ratio is locked</strong> - width and height adjust proportionally.
                 </p>
               </div>
 
@@ -281,43 +347,52 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
                 )}
 
                 {/* Draggable Photo Slots */}
-                {photoSlots.map((slot) => (
-                  <div
-                    key={slot.id}
-                    className="absolute border-4 border-green-500 bg-green-500/20 cursor-move"
-                    style={{
-                      left: `${slot.x}%`,
-                      top: `${slot.y}%`,
-                      width: `${slot.width}%`,
-                      height: `${slot.height}%`,
-                    }}
-                    onMouseDown={(e) => handleMouseDown(slot.id, false, e)}
-                  >
-                    {/* Slot Label */}
-                    <div className="absolute top-1 left-1 bg-green-600 text-white text-xs px-2 py-1 rounded font-semibold">
-                      Photo {slot.id}
-                    </div>
-
-                    {/* Resize Handle */}
+                {photoSlots.map((slot) => {
+                  const slotAspectRatio = slot.width / slot.height;
+                  return (
                     <div
-                      className="absolute bottom-0 right-0 w-4 h-4 bg-green-600 cursor-se-resize"
-                      onMouseDown={(e) => handleMouseDown(slot. id, true, e)}
-                    />
-                  </div>
-                ))}
+                      key={slot.id}
+                      className="absolute border-4 border-green-500 bg-green-500/20 cursor-move"
+                      style={{
+                        left: `${slot.x}%`,
+                        top: `${slot.y}%`,
+                        width: `${slot.width}%`,
+                        height: `${slot.height}%`,
+                      }}
+                      onMouseDown={(e) => handleMouseDown(slot.id, false, e)}
+                    >
+                      {/* Slot Label with Aspect Ratio */}
+                      <div className="absolute top-1 left-1 bg-green-600 text-white text-xs px-2 py-1 rounded font-semibold">
+                        Photo {slot.id} | Ratio: {slotAspectRatio.toFixed(2)}
+                      </div>
+
+                      {/* Resize Handle */}
+                      <div
+                        className="absolute bottom-0 right-0 w-4 h-4 bg-green-600 cursor-se-resize"
+                        onMouseDown={(e) => handleMouseDown(slot. id, true, e)}
+                      />
+                    </div>
+                  );
+                })}
               </div>
 
-              {/* Slot Info */}
-              <div className="grid grid-cols-3 gap-4 text-xs">
-                {photoSlots. map((slot) => (
-                  <div key={slot.id} className="bg-gray-100 p-3 rounded-lg">
-                    <p className="font-semibold mb-1">Photo {slot.id}</p>
-                    <p>X: {slot.x. toFixed(1)}%</p>
-                    <p>Y: {slot.y.toFixed(1)}%</p>
-                    <p>W: {slot.width.toFixed(1)}%</p>
-                    <p>H: {slot.height.toFixed(1)}%</p>
-                  </div>
-                ))}
+              {/* Slot Info with Aspect Ratio */}
+              <div className={`grid gap-4 text-xs ${selectedPhotoCount === 4 ? 'grid-cols-4' : selectedPhotoCount === 3 ? 'grid-cols-3' : selectedPhotoCount === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                {photoSlots. map((slot) => {
+                  const slotAspectRatio = slot.width / slot.height;
+                  return (
+                    <div key={slot.id} className="bg-gray-100 p-3 rounded-lg">
+                      <p className="font-semibold mb-1">Photo {slot.id}</p>
+                      <p>X: {slot.x. toFixed(1)}%</p>
+                      <p>Y: {slot.y.toFixed(1)}%</p>
+                      <p>W: {slot.width.toFixed(1)}%</p>
+                      <p>H: {slot.height.toFixed(1)}%</p>
+                      <p className="font-semibold text-green-600 mt-1">
+                        Ratio: {slotAspectRatio.toFixed(3)}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

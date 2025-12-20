@@ -1,5 +1,19 @@
 // types/index.ts
 
+// Frame layout types
+export type FrameLayout = 'single' | 'vertical' | 'strip' | 'grid';
+
+// Frame configuration (preset-based)
+export interface FrameConfig {
+  photo_count: 1 | 2 | 3 | 4;
+  layout: FrameLayout;
+  aspect_ratio: number;
+  default_slot_size: {
+    width: number;
+    height: number;
+  };
+}
+
 // Photo slot configuration (used by admin to set photo positions)
 export interface PhotoSlot {
   id: number;  // 1, 2, 3
@@ -18,6 +32,7 @@ export interface Frame {
   thumbnail_url: string | null;
   is_active: boolean;
   photo_slots? :  PhotoSlot[] | null;  // Photo slot positions from admin
+  frame_config?: FrameConfig | null;  // Preset configuration with locked aspect ratio
   created_at: string;
   updated_at: string;
 }
