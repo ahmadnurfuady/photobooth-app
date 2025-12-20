@@ -1,7 +1,7 @@
 // components/admin/AddFrameModal.tsx
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 import toast from 'react-hot-toast';
 
@@ -20,15 +20,29 @@ export const AddFrameModal: React.FC<AddFrameModalProps> = ({ isOpen, onClose, o
     gapBetweenPhotos: 4,
   });
   const [manualMode, setManualMode] = useState(false);
+  // ✅ FORCE 4:3 LANDSCAPE RATIO (cannot be changed)
+  const ASPECT_RATIO = 4 / 3;  // 4:3 landscape
   const [slots, setSlots] = useState([
-    { x: 12, y: 6, width: 76, height: 26, radius: 8 },
-    { x: 12, y: 38, width: 76, height: 26, radius: 8 },
-    { x: 12, y: 70, width: 76, height: 26, radius: 8 },
+    { x: 10, y: 5, width: 80, height: 60, radius: 8 },  // 4:3 ratio
+    { x: 10, y: 40, width: 80, height: 60, radius: 8 },
+    { x: 10, y: 75, width: 80, height: 60, radius: 8 },
   ] as { x: number; y: number; width: number; height: number; radius?: number }[]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string>('');
+  const [frameDimensions, setFrameDimensions] = useState<{ w: number; h: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Normalize slots to 4:3 ratio when component mounts or manual mode enters
+  useEffect(() => {
+    if (manualMode) {
+      const normalized = slots.map((s) => ({
+        ...s,
+        height: Math.round((s.width / ASPECT_RATIO) * 100) / 100,
+      }));
+      setSlots(normalized);
+    }
+  }, [manualMode]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -37,6 +51,12 @@ export const AddFrameModal: React.FC<AddFrameModalProps> = ({ isOpen, onClose, o
       const reader = new FileReader();
       reader.onloadend = () => {
         setPreview(reader.result as string);
+        // Load frame dimensions for accurate preview ratio
+        const img = new Image();
+        img.onload = () => {
+          setFrameDimensions({ w: img.naturalWidth, h: img.naturalHeight });
+        };
+        img.src = reader.result as string;
       };
       reader.readAsDataURL(file);
     }
@@ -89,9 +109,9 @@ export const AddFrameModal: React.FC<AddFrameModalProps> = ({ isOpen, onClose, o
         setFormData({ name: '', isActive: true, sidePadding: 12, verticalPadding: 6, gapBetweenPhotos: 4 });
         setManualMode(false);
         setSlots([
-          { x: 12, y: 6, width: 76, height: 26, radius: 8 },
-          { x: 12, y: 38, width: 76, height: 26, radius: 8 },
-          { x: 12, y: 70, width: 76, height: 26, radius: 8 },
+          { x: 10, y: 5, width: 80, height: 60, radius: 8 },
+          { x: 10, y: 40, width: 80, height: 60, radius: 8 },
+          { x: 10, y: 75, width: 80, height: 60, radius: 8 },
         ]);
         setSelectedFile(null);
         setPreview('');
@@ -192,7 +212,7 @@ export const AddFrameModal: React.FC<AddFrameModalProps> = ({ isOpen, onClose, o
               <label className="block text-sm font-medium text-gray-900 mb-2">
                 Preview
               </label>
-              <div className="relative w-full overflow-hidden rounded-lg border border-gray-200" style={{ aspectRatio: '3/4' }}>
+              <div className="relative w-full overflow-hidden rounded-lg border border-gray-200" style={{ aspectRatio: frameDimensions ? `${frameDimensions.w}/${frameDimensions.h}` : '3/4' }}>
                 <img src={preview} alt="Preview" className="absolute inset-0 w-full h-full object-contain" />
                 {manualMode && slots.map((s, idx) => (
                   <div
@@ -220,7 +240,22 @@ export const AddFrameModal: React.FC<AddFrameModalProps> = ({ isOpen, onClose, o
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-gray-900">Photo Layout Settings</h3>
               <label className="flex items-center gap-2 text-xs text-gray-700">
-                <input type="checkbox" checked={manualMode} onChange={(e) => setManualMode(e.target.checked)} disabled={loading} />
+                <input 
+                  type="checkbox" 
+                  checked={manualMode} 
+                  onChange={(e) => {
+                    setManualMode(e.target.checked);
+                    // Reset slots to 4:3 ratio when toggling manual mode
+                    if (!e.target.checked) {
+                      setSlots([
+                        { x: 10, y: 5, width: 80, height: 60, radius: 8 },
+                        { x: 10, y: 40, width: 80, height: 60, radius: 8 },
+                        { x: 10, y: 75, width: 80, height: 60, radius: 8 },
+                      ]);
+                    }
+                  }} 
+                  disabled={loading} 
+                />
                 Manual placement (advanced)
               </label>
             </div>
@@ -282,6 +317,9 @@ export const AddFrameModal: React.FC<AddFrameModalProps> = ({ isOpen, onClose, o
 
             {manualMode && (
               <div className="grid grid-cols-1 gap-3">
+                <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                  📐 Aspect ratio FIXED ke 4:3 landscape - hanya ukuran (width) yang bisa diubah
+                </div>
                 {[0,1,2].map((i) => (
                   <div key={i} className="grid grid-cols-2 gap-2 p-3 bg-gray-50 rounded">
                     <div className="col-span-2 text-xs font-medium text-gray-700">Slot {i+1}</div>
@@ -295,15 +333,18 @@ export const AddFrameModal: React.FC<AddFrameModalProps> = ({ isOpen, onClose, o
                         const v = Number(e.target.value); const next = [...slots]; next[i] = { ...next[i], y: v }; setSlots(next);
                       }} className="mt-1 w-full border rounded px-2 py-1 text-sm" />
                     </label>
-                    <label className="text-xs text-gray-700">Width%
+                    <label className="text-xs text-gray-700">Width% (size)
                       <input type="number" min={1} max={100} step={0.5} value={slots[i].width} onChange={(e) => {
-                        const v = Number(e.target.value); const next = [...slots]; next[i] = { ...next[i], width: v }; setSlots(next);
+                        const newWidth = Number(e.target.value);
+                        const newHeight = Math.round((newWidth / ASPECT_RATIO) * 100) / 100;  // Maintain 4:3
+                        const next = [...slots];
+                        next[i] = { ...next[i], width: newWidth, height: newHeight };
+                        setSlots(next);
                       }} className="mt-1 w-full border rounded px-2 py-1 text-sm" />
                     </label>
-                    <label className="text-xs text-gray-700">Height%
-                      <input type="number" min={1} max={100} step={0.5} value={slots[i].height} onChange={(e) => {
-                        const v = Number(e.target.value); const next = [...slots]; next[i] = { ...next[i], height: v }; setSlots(next);
-                      }} className="mt-1 w-full border rounded px-2 py-1 text-sm" />
+                    <label className="text-xs text-gray-700">Height% (auto)
+                      <input type="number" disabled value={slots[i].height.toFixed(1)} className="mt-1 w-full border rounded px-2 py-1 text-sm bg-gray-200 cursor-not-allowed" />
+                      <span className="text-xs text-gray-500 mt-1">Auto (4:3)</span>
                     </label>
                     <label className="text-xs text-gray-700">Radius%
                       <input type="number" min={0} max={30} step={0.5} value={slots[i].radius ?? 8} onChange={(e) => {

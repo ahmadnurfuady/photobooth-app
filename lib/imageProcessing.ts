@@ -104,20 +104,23 @@ export async function createPhotoStripWithFrame(
           aspectRatio: number;
         }>;
 
-        if (photoSlots && photoSlots.length === 3) {
-          // Use custom slots from admin (convert % to pixels)
+        if (photoSlots && photoSlots.length >= 1) {
+          // ✅ FORCE 4:3 LANDSCAPE FOR ALL PHOTOS (regardless of frame slots)
+          const FORCE_ASPECT_RATIO = 4 / 3;  // 4:3 landscape
+          
           slots = photoSlots.map((s, index) => {
             const slotX = Math.round((s.x / 100) * frameWidth);
             const slotY = Math.round((s.y / 100) * frameHeight);
             const slotWidth = Math.round((s.width / 100) * frameWidth);
-            const slotHeight = Math.round((s.height / 100) * frameHeight);
-            const aspectRatio = slotWidth / slotHeight;
+            // Calculate height from width using 4:3 ratio
+            const slotHeight = Math.round(slotWidth / FORCE_ASPECT_RATIO);
+            const aspectRatio = FORCE_ASPECT_RATIO;
 
-            console.log(`Slot ${index + 1} conversion:`, {
+            console.log(`Slot ${index + 1} (FORCED 4:3):`, {
               percent: `${s.width.toFixed(2)}% × ${s.height.toFixed(2)}%`,
-              pixels: `${slotWidth}px × ${slotHeight}px`,
+              pixels: `${slotWidth}px × ${slotHeight}px (forced 4:3)`,
               aspectRatio: aspectRatio.toFixed(3),
-              orientation: aspectRatio > 1 ? 'landscape (OK)' : 'portrait (ERROR)',
+              orientation: 'landscape (FORCED)',
             });
 
             return {
@@ -213,8 +216,8 @@ export async function createPhotoStripWithFrame(
               const scaleY = slot.height / img.height;
               
               // Use the LARGER scale to ensure full coverage
-              // Add 3% safety margin to guarantee no white space
-              const scale = Math.max(scaleX, scaleY) * 1.03;
+              // Scale up 1.5x for better fill without over-cropping
+              const scale = Math.max(scaleX, scaleY) * 1.5;
               
               // Calculate final dimensions (rounded up)
               drawWidth = Math.ceil(img.width * scale);

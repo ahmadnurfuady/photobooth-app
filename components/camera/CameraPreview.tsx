@@ -95,7 +95,7 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
     if (!currentSlot || !frameDimensions) {
       return { 
         width: 400, 
-        height: 300, 
+        height: 300,  // 400/300 = 4/3
         left: '50%',
         top: '50%',
         transform: 'translate(-50%, -50%)',
@@ -103,20 +103,9 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
       };
     }
 
-    // ✅ Use ACTUAL frame dimensions from loaded image
-    const FRAME_WIDTH = frameDimensions.width;
-    const FRAME_HEIGHT = frameDimensions.height;
-    
-    // ✅ CRITICAL FIX: Convert percentages to pixels FIRST, then calculate aspect ratio
-    const slotPixelWidth = (currentSlot.width / 100) * FRAME_WIDTH;
-    const slotPixelHeight = (currentSlot.height / 100) * FRAME_HEIGHT;
-    const slotAspectRatio = slotPixelWidth / slotPixelHeight;
-
-    console.log('📐 Bounding Box Calculation:');
-    console.log('  Slot from DB:', currentSlot.width, '% ×', currentSlot.height, '%');
-    console.log('  Frame dimensions:', FRAME_WIDTH, '×', FRAME_HEIGHT);
-    console.log('  Slot pixels:', slotPixelWidth.toFixed(0), '×', slotPixelHeight.toFixed(0));
-    console.log('  Aspect ratio:', slotAspectRatio.toFixed(3), slotAspectRatio > 1 ? '(landscape ✅)' : '(portrait ❌)');
+    // ✅ FORCE 4:3 LANDSCAPE FOR ALL PHOTOS
+    const FORCE_ASPECT_RATIO = 4 / 3;
+    const slotAspectRatio = FORCE_ASPECT_RATIO;
 
     // Calculate box dimensions maintaining CORRECT aspect ratio
     let boxWidth: number;
