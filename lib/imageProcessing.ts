@@ -58,9 +58,8 @@ export async function applyFrameToPhoto(
 }
 
 /**
- * Create composite image with photos in frame
+ * Create composite image with 3 photos in 1 frame (vertical strip)
  * Uses PhotoSlot[] configuration from admin with CORRECT aspect ratios
- * Supports 1-4 photos
  */
 export async function createPhotoStripWithFrame(
   photos: string[],
@@ -69,8 +68,8 @@ export async function createPhotoStripWithFrame(
 ): Promise<string> {
   return new Promise(async (resolve, reject) => {
     try {
-      if (photos.length < 1 || photos.length > 4) {
-        reject(new Error('1 to 4 photos required'));
+      if (photos.length !== 3) {
+        reject(new Error('Exactly 3 photos required'));
         return;
       }
 
@@ -105,7 +104,7 @@ export async function createPhotoStripWithFrame(
           aspectRatio: number;
         }>;
 
-        if (photoSlots && photoSlots.length === photos.length) {
+        if (photoSlots && photoSlots.length === 3) {
           // Use custom slots from admin (convert % to pixels)
           slots = photoSlots.map((s, index) => {
             const slotX = Math.round((s.x / 100) * frameWidth);
@@ -129,26 +128,39 @@ export async function createPhotoStripWithFrame(
             };
           });
         } else {
-          // Fallback: Default slots based on photo count
-          console.warn(`⚠️ No photo_slots found, using default layout for ${photos.length} photos`);
+          // Fallback: Default 3 equal vertical slots
+          console.warn('⚠️ No photo_slots found, using default layout');
           const sidePadding = Math.floor(frameWidth * 0.08);
           const verticalPadding = Math.floor(frameHeight * 0.06);
           const gap = Math.floor(frameHeight * 0.03);
           
           const photoWidth = frameWidth - (sidePadding * 2);
-          const availableHeight = frameHeight - (verticalPadding * 2) - (gap * (photos.length - 1));
-          const photoHeight = Math.floor(availableHeight / photos.length);
+          const availableHeight = frameHeight - (verticalPadding * 2) - (gap * 2);
+          const photoHeight = Math.floor(availableHeight / 3);
 
-          slots = [];
-          for (let i = 0; i < photos.length; i++) {
-            slots.push({ 
+          slots = [
+            { 
               x: sidePadding, 
-              y: verticalPadding + i * (photoHeight + gap), 
+              y: verticalPadding, 
               width: photoWidth, 
               height: photoHeight,
               aspectRatio: photoWidth / photoHeight,
-            });
-          }
+            },
+            { 
+              x: sidePadding, 
+              y: verticalPadding + photoHeight + gap, 
+              width: photoWidth, 
+              height: photoHeight,
+              aspectRatio: photoWidth / photoHeight,
+            },
+            { 
+              x: sidePadding, 
+              y: verticalPadding + (photoHeight * 2) + (gap * 2), 
+              width: photoWidth, 
+              height: photoHeight,
+              aspectRatio: photoWidth / photoHeight,
+            },
+          ];
         }
 
         // Fill background
@@ -239,11 +251,11 @@ export async function createPhotoStripWithFrame(
           });
         };
 
-        // Draw all photos sequentially
+        // Draw all 3 photos sequentially
         try {
-          for (let i = 0; i < photos.length; i++) {
-            await loadAndDrawPhoto(photos[i], slots[i], i + 1);
-          }
+          await loadAndDrawPhoto(photos[0], slots[0], 1);
+          await loadAndDrawPhoto(photos[1], slots[1], 2);
+          await loadAndDrawPhoto(photos[2], slots[2], 3);
 
           // Draw frame overlay on top
           ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
