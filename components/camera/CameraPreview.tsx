@@ -144,7 +144,7 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
   }, [isCapturing, currentCapturedPhoto]);
 
   const capturePhoto = useCallback(() => {
-    if (!webcamRef.current || !cameraContainerRef.current || !currentSlot) return;
+    if (! webcamRef.current || !  cameraContainerRef.current || ! currentSlot) return;
 
     try {
       // Get full webcam screenshot
@@ -153,62 +153,72 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
       if (!fullImage) return;
 
       // Container dimensions
-      const containerWidth = CAMERA_CONTAINER.width;
+      const containerWidth = CAMERA_CONTAINER. width;
       const containerHeight = CAMERA_CONTAINER.height;
 
-      // Green box position (centered)
+      // Green box is centered
       const boxCenterX = containerWidth / 2;
       const boxCenterY = containerHeight / 2;
       
-      // Green box dimensions (from boundingBox)
+      // Calculate crop area (area inside green box)
       const cropX = boxCenterX - (boundingBox.width / 2);
       const cropY = boxCenterY - (boundingBox.height / 2);
       const cropWidth = boundingBox.width;
       const cropHeight = boundingBox.height;
 
-      // Create canvas with EXACT aspect ratio matching the slot
+      // Create canvas with EXACT aspect ratio from admin slot
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       
       if (!ctx) return;
 
-      // ✅ CRITICAL: Use the CORRECT aspect ratio calculated from frame dimensions
-      const CANVAS_BASE_WIDTH = 1000;
-      const actualAspectRatio = boundingBox.aspectRatio; // Already calculated correctly above
+      // ✅ CRITICAL FIX:   Use slot aspect ratio to set canvas dimensions
+      // This ensures captured image has SAME aspect ratio as slot
+      const slotAspectRatio = currentSlot.width / currentSlot.height;
       
-      canvas.width = CANVAS_BASE_WIDTH;
-      canvas.height = Math.round(CANVAS_BASE_WIDTH / actualAspectRatio);
+      // Set canvas width based on quality, height based on aspect ratio
+      const CAPTURE_WIDTH = 1000;  // Good quality
+      const CAPTURE_HEIGHT = Math.round(CAPTURE_WIDTH / slotAspectRatio);
+      
+      canvas.width = CAPTURE_WIDTH;
+      canvas.height = CAPTURE_HEIGHT;
 
-      console.log('📸 Capture Info:');
-      console.log('  BoundingBox:', boundingBox.width.toFixed(0), 'px ×', boundingBox.height.toFixed(0), 'px');
-      console.log('  Actual Aspect Ratio:', actualAspectRatio.toFixed(3), actualAspectRatio > 1 ? '(landscape)' : '(portrait)');
+      console.log('📸 Capture Info: ');
+      console.log('  Slot:  ', currentSlot.width, '% ×', currentSlot.height, '%');
+      console.log('  Slot Aspect Ratio:', slotAspectRatio. toFixed(3));
+      console.log('  Green Box:', cropWidth. toFixed(0), '×', cropHeight.toFixed(0), 'px');
       console.log('  Canvas:', canvas.width, '×', canvas.height);
-      console.log('  Canvas Aspect Ratio:', (canvas.width / canvas.height).toFixed(3));
+      console.log('  Canvas Aspect Ratio:', (canvas. width / canvas.height).toFixed(3));
+      console.log('  Match:', Math.abs(slotAspectRatio - (canvas.width / canvas.height)) < 0.01 ? '✅' : '⚠️ MISMATCH!');
 
       // Load full webcam image
       const img = new Image();
       img.onload = () => {
-        // Calculate scale from webcam resolution to container size
+        // Calculate scale from webcam resolution to container
         const scaleX = img.width / containerWidth;
-        const scaleY = img.height / containerHeight;
+        const scaleY = img.  height / containerHeight;
 
-        // Draw ONLY the area inside green box, scaled to canvas size
+        // Draw the area inside green box to canvas
+        // Scale it to fit canvas while maintaining aspect ratio
         ctx.drawImage(
           img,
-          cropX * scaleX,      // Source X
-          cropY * scaleY,      // Source Y
-          cropWidth * scaleX,  // Source Width
-          cropHeight * scaleY, // Source Height
-          0,                   // Destination X
-          0,                   // Destination Y
-          canvas.width,        // Destination Width (fit to canvas)
-          canvas.height        // Destination Height (fit to canvas)
+          cropX * scaleX,       // Source X (green box left edge)
+          cropY * scaleY,       // Source Y (green box top edge)
+          cropWidth * scaleX,   // Source Width (green box width)
+          cropHeight * scaleY,  // Source Height (green box height)
+          0,                    // Destination X
+          0,                    // Destination Y
+          canvas.width,         // Destination Width (stretch to canvas)
+          canvas.height         // Destination Height (stretch to canvas)
         );
 
         // Convert to base64
-        const croppedImage = canvas.toDataURL('image/jpeg', 0.95);
+        const croppedImage = canvas.toDataURL('image/jpeg', 0.92);
         
-        console.log('✅ Photo captured with aspect ratio:', (canvas.width / canvas.height).toFixed(3));
+        console.log('✅ Photo captured! ');
+        console.log('  Final aspect ratio:', (canvas.width / canvas.height).toFixed(3));
+        console.log('  Expected:', slotAspectRatio. toFixed(3));
+        console.log('  Difference:', Math.  abs(slotAspectRatio - (canvas.width / canvas.height)).toFixed(4));
         
         onCapture(croppedImage);
       };

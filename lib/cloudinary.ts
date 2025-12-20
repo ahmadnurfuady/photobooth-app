@@ -33,6 +33,13 @@ export async function uploadToCloudinary(
       folder: 'photobooth',
       resource_type: 'auto',
       overwrite: false,
+      // ✅ CRITICAL FIX: Preserve original orientation, ignore EXIF rotation
+      transformation: [
+        {
+          angle: 0,  // No rotation
+          flags: 'ignore_aspect_ratio',  // Ignore EXIF orientation data
+        }
+      ],
     };
 
     const uploadOptions = { ...defaultOptions, ...options };
@@ -52,7 +59,20 @@ export async function uploadToCloudinary(
       chunk_size: 6000000, // 6MB chunks for large files
     };
 
+    console.log('📤 Uploading to Cloudinary with config:', {
+      folder: uploadConfig.folder,
+      transformation: uploadConfig.transformation,
+    });
+
     const result = await cloudinary.uploader.upload(fileToUpload, uploadConfig);
+
+    console.log('✅ Cloudinary upload result:', {
+      url: result. secure_url,
+      width: result.width,
+      height: result.height,
+      aspectRatio: (result.width / result.height).toFixed(3),
+      format: result.format,
+    });
 
     return {
       url: result.url,
@@ -66,8 +86,8 @@ export async function uploadToCloudinary(
     };
   } catch (error: any) {
     console.error('Cloudinary upload error:', error);
-    const errorMessage = error.message || error.error?.message || JSON.stringify(error);
-    throw new Error(`Failed to upload to Cloudinary: ${errorMessage}`);
+    const errorMessage = error.message || error. error?.message || JSON.stringify(error);
+    throw new Error(`Failed to upload to Cloudinary:  ${errorMessage}`);
   }
 }
 
