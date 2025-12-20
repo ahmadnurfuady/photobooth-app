@@ -27,16 +27,19 @@ export const FrameList:  React.FC<FrameListProps> = ({ initialFrames = [], onRef
   }, [initialFrames]);
 
   const fetchFrames = async () => {
-    setLoading(true);
     try {
-      const response = await fetch('/api/frames');
+      setLoading(true);
+      // UBAH BARIS INI:
+      // DARI: const response = await fetch('/api/frames');
+      // MENJADI:
+      const response = await fetch('/api/frames?active=true');  // ← TAMBAHKAN ?active=true
+      
       if (!response.ok) throw new Error('Failed to fetch frames');
       
       const data = await response.json();
-      setFrames(data. data || []);
+      setFrames(data.data || []);
     } catch (error) {
       console.error('Error fetching frames:', error);
-      toast.error('Failed to load frames');
     } finally {
       setLoading(false);
     }

@@ -22,7 +22,7 @@ export default function FrameSelectionPage() {
   const fetchActiveFrames = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/frames? active=true');
+      const response = await fetch('/api/frames?active=true');
       if (response.ok) {
         const data = await response.json();
         setFrames(data. data || []);
@@ -105,24 +105,24 @@ export default function FrameSelectionPage() {
             <Card
               key={frame.id}
               hover
-              className={`cursor-pointer transition-all ${
+              className={`cursor-pointer transition-all w-[190px] ${
                 selectedFrame?.id === frame.id
-                  ? 'ring-4 ring-blue-500 shadow-2xl scale-105'
+                  ? 'ring-4 ring-blue-500 shadow-2xl'
                   : 'hover:shadow-xl'
               }`}
               onClick={() => setSelectedFrame(frame)}
             >
               {/* Frame Image - Portrait, full visible, proper size */}
-              <div className="relative w-full bg-gray-100 rounded-t-lg overflow-hidden p-6 flex items-center justify-center" style={{ minHeight: '250px' }}>
+              <div className="relative w-full bg-gray-100 rounded-t-lg overflow-hidden p-2 flex items-center justify-center w-[160px] mx-auto" style={{ minHeight: '250px' }}>
                 <img
                   src={ frame.cloudinary_url}
                   alt={frame.name}
                   className="max-w-full h-auto object-contain"
-                  style={{ maxHeight: '400px', maxWidth: '250px' }}
+                  style={{ maxHeight: '260px', maxWidth: '200px' }}
                 />
                 
                 {selectedFrame?.id === frame.id && (
-                  <div className="absolute top-3 right-3 bg-blue-600 text-white px-2. 5 py-1 rounded-full font-semibold text-xs flex items-center gap-1.5 shadow-lg">
+                  <div className="absolute top-3 right-3 bg-blue-600 text-white px-2.5 py-1 rounded-full font-semibold text-xs flex items-center gap-1.5 shadow-lg">
                     <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                       <path
                         fillRule="evenodd"
@@ -134,7 +134,7 @@ export default function FrameSelectionPage() {
                   </div>
                 )}
               </div>
-              <div className="p-3">
+              <div className="p-3 w-[160px] mx-auto mt-4">
                 <h3 className="text-lg font-semibold text-gray-900 text-center truncate">
                   {frame. name}
                 </h3>
