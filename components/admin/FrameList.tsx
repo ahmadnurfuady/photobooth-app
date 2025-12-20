@@ -86,7 +86,7 @@ export const FrameList:  React.FC<FrameListProps> = ({ initialFrames = [], onRef
 
   const handleDelete = async (id: string) => {
     try {
-      const response = await fetch(`/api/frames/${id}`, {
+      const response = await fetch(`/api/frames/id=${id}`, {
         method: 'DELETE',
       });
 

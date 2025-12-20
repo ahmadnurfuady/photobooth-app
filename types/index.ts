@@ -74,3 +74,15 @@ export interface User {
   email: string | null;
   displayName?:  string | null;
 }
+
+// types/index.ts
+
+// ...  (existing types)
+
+export interface PhotoSlot {
+  id: number;  // 1, 2, 3
+  x: number;   // % from left
+  y: number;   // % from top
+  width:  number;   // % of frame width
+  height: number;  // % of frame height
+}

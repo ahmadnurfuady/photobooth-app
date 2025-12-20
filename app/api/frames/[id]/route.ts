@@ -1,15 +1,16 @@
-// app/api/frames/[id]/route.ts
+// app/api/frames/[id]/route. ts
 import { NextRequest, NextResponse } from 'next/server';
-import { frameQueries } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 
 // PATCH /api/frames/[id] - Update frame
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
+    const { id } = await context.params;
+    console.log('🔧 PATCH /api/frames/[id] - ID:', id);
     
     if (!id) {
       return NextResponse.json(
@@ -19,12 +20,13 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { name, is_active } = body;
+    console.log('📝 Update body:', body);
 
     // Build updates object
-    const updates: any = {};
-    if (name !== undefined) updates.name = name.trim();
-    if (is_active !== undefined) updates.is_active = is_active;
+    const updates:  any = {};
+    if (body.name !== undefined) updates.name = body.name. trim();
+    if (body.is_active !== undefined) updates.is_active = body.is_active;
+    if (body.photo_slots !== undefined) updates.photo_slots = body.photo_slots;
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json(
@@ -33,11 +35,18 @@ export async function PATCH(
       );
     }
 
+    console.log('📝 Parsed updates:', updates);
+
     // Update in Supabase
-    const { data, error } = await frameQueries.update(id, updates);
+    const { data, error } = await supabaseAdmin
+      .from('frames')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
 
     if (error) {
-      console.error('Supabase error updating frame:', error);
+      console.error('❌ Supabase update error:', error);
       return NextResponse.json(
         { success: false, error: error.message || 'Failed to update frame' },
         { status: 500 }
@@ -45,20 +54,21 @@ export async function PATCH(
     }
 
     if (!data) {
-      console.error('No data returned from Supabase update');
+      console.error('❌ No data returned from update');
       return NextResponse.json(
         { success: false, error: 'Frame not found' },
         { status: 404 }
       );
     }
 
+    console.log('✅ Update successful');
     return NextResponse.json({
       success: true,
       data,
       message: 'Frame updated successfully',
     });
-  } catch (error: any) {
-    console.error('Error updating frame:', error);
+  } catch (error:  any) {
+    console.error('❌ PATCH Error:', error);
     return NextResponse.json(
       { success: false, error: error.message || 'Internal server error' },
       { status: 500 }
@@ -68,47 +78,85 @@ export async function PATCH(
 
 // DELETE /api/frames/[id] - Delete frame
 export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  request:  NextRequest,
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
+    const { id } = await context.params;
+    console.log('🗑️ DELETE /api/frames/[id] - START');
+    console.log('📌 Frame ID:', id);
 
-    // Get frame details first
-    const { data: frame, error: fetchError } = await frameQueries.getById(id);
-
-    if (fetchError || !frame) {
+    if (!id) {
+      console.log('❌ No ID provided');
       return NextResponse.json(
+        { success: false, error: 'Frame ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // Step 1: Get frame details
+    console.log('🔍 Step 1: Fetching frame from database...');
+    const { data: frame, error: fetchError } = await supabaseAdmin
+      .from('frames')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError) {
+      console.error('❌ Fetch error:', fetchError);
+      return NextResponse.json(
+        { success: false, error: `Fetch error: ${fetchError.message}` },
+        { status: 500 }
+      );
+    }
+
+    if (!frame) {
+      console.log('❌ Frame not found in database');
+      return NextResponse. json(
         { success: false, error: 'Frame not found' },
         { status: 404 }
       );
     }
 
-    // Delete from Cloudinary
-    try {
-      await deleteFromCloudinary(frame.cloudinary_public_id);
-    } catch (cloudinaryError) {
-      console.error('Cloudinary delete error:', cloudinaryError);
-      // Continue with database deletion even if Cloudinary fails
+    console.log('✅ Frame found:', frame. name);
+    console.log('📦 Cloudinary Public ID:', frame.cloudinary_public_id);
+
+    // Step 2: Delete from Cloudinary
+    console.log('🗑️ Step 2: Deleting from Cloudinary...');
+    if (frame. cloudinary_public_id) {
+      try {
+        await deleteFromCloudinary(frame.cloudinary_public_id);
+        console.log('✅ Cloudinary delete successful');
+      } catch (cloudinaryError:  any) {
+        console.error('⚠️ Cloudinary delete error (continuing anyway):', cloudinaryError. message);
+      }
+    } else {
+      console.log('⚠️ No Cloudinary public ID, skipping Cloudinary delete');
     }
 
-    // Delete from Supabase
-    const { error:  deleteError } = await frameQueries.delete(id);
+    // Step 3: Delete from Supabase
+    console.log('🗑️ Step 3: Deleting from database...');
+    const { error: deleteError } = await supabaseAdmin
+      .from('frames')
+      .delete()
+      .eq('id', id);
 
     if (deleteError) {
-      console.error('Supabase error:', deleteError);
-      return NextResponse. json(
-        { success: false, error: 'Failed to delete frame from database' },
-        { status:  500 }
+      console.error('❌ Database delete error:', deleteError);
+      return NextResponse.json(
+        { success: false, error: `Database delete failed: ${deleteError.message}` },
+        { status: 500 }
       );
     }
 
-    return NextResponse. json({
+    console.log('✅ DELETE SUCCESSFUL - Frame deleted completely');
+    return NextResponse.json({
       success: true,
       message: 'Frame deleted successfully',
     });
   } catch (error: any) {
-    console.error('Error deleting frame:', error);
+    console.error('❌ DELETE Error (uncaught):', error);
+    console.error('Error stack:', error.stack);
     return NextResponse.json(
       { success: false, error: error.message || 'Internal server error' },
       { status: 500 }

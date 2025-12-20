@@ -1,120 +1,198 @@
 // app/api/frames/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { frameQueries } from '@/lib/supabase';
-import { uploadToCloudinary, generateThumbnailUrl } from '@/lib/cloudinary';
+import { supabaseAdmin, supabase } from '@/lib/supabase'; // FIXED IMPORT
+import { uploadToCloudinary, generateThumbnailUrl, deleteFromCloudinary } from '@/lib/cloudinary';
 
-// GET /api/frames - Fetch all frames
-export async function GET(request: NextRequest) {
+// GET - List frames
+export async function GET(request:  NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const activeOnly = searchParams.get('active') === 'true';
-    const search = searchParams.get('search');
 
-    const { data, error } = await frameQueries.getAll(activeOnly);
+    let query = supabase
+      .from('frames')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('Supabase error:', error);
-      return NextResponse.json(
-        { success: false, error: 'Failed to fetch frames' },
-        { status: 500 }
-      );
+    if (activeOnly) {
+      query = query.eq('is_active', true);
     }
 
-    let frames = data || [];
+    const { data:  frames, error } = await query;
 
-    // Apply search filter
-    if (search) {
-      frames = frames.filter((frame) =>
-        frame.name.toLowerCase().includes(search.toLowerCase())
-      );
-    }
+    if (error) throw error;
 
-    return NextResponse.json({
+    return NextResponse. json({
       success: true,
       data: frames,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error fetching frames:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch frames',
+      },
       { status: 500 }
     );
   }
 }
 
-// POST /api/frames - Create new frame
+// POST - Create new frame (WITH photo_slots)
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { name, file, is_active = true, layout_settings } = body;
+    
 
-    // Validation
-    if (!name || !name.trim()) {
+    const formData = await request.formData();
+    const name = formData.get('name') as string;
+    const image = formData.get('image') as string; // base64
+    const photoSlotsString = formData.get('photoSlots') as string;
+
+    if (!name || !image) {
       return NextResponse.json(
-        { success: false, error: 'Frame name is required' },
-        { status: 400 }
+        { success: false, error: 'Name and image are required' },
+        { status:  400 }
       );
     }
 
-    if (!file) {
-      return NextResponse.json(
-        { success: false, error: 'Image file is required' },
-        { status: 400 }
-      );
+    // Parse photo slots
+    let photoSlots;
+    try {
+      photoSlots = photoSlotsString ? JSON.parse(photoSlotsString) : null;
+    } catch (e) {
+      console.error('Error parsing photo slots:', e);
+      photoSlots = null;
     }
 
     // Upload to Cloudinary
-    const uploadResult = await uploadToCloudinary(file, {
+    const uploadResult = await uploadToCloudinary(image, {
       folder: 'photobooth/frames',
-      resource_type: 'image',
+      public_id: `frame_${Date.now()}`,
     });
 
-    // Generate thumbnail URL
-    const thumbnailUrl = generateThumbnailUrl(uploadResult.public_id, 400, 400);
+    // Generate thumbnail
+    const thumbnailUrl = generateThumbnailUrl(uploadResult.public_id);
 
-    // Prepare frame data
-    const frameData: any = {
-      name: name.trim(),
-      cloudinary_url: uploadResult.secure_url,
-      cloudinary_public_id: uploadResult.public_id,
-      thumbnail_url: thumbnailUrl,
-      is_active,
-    };
+    // Save to database using supabaseAdmin
+    const { data: frame, error:  dbError } = await supabaseAdmin
+      .from('frames')
+      .insert({
+        name,
+        cloudinary_url: uploadResult.secure_url,
+        cloudinary_public_id: uploadResult.public_id,
+        thumbnail_url: thumbnailUrl,
+        is_active: true,
+        photo_slots: photoSlots, // Save photo slots
+      })
+      .select()
+      .single();
 
-    // Only add layout_settings if provided
-    if (layout_settings) {
-      frameData.layout_settings = layout_settings;
-    }
-
-    // Save to Supabase
-    const { data, error } = await frameQueries.create(frameData);
-
-    if (error) {
-      console.error('Supabase error details:', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code,
-      });
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: `Database error: ${error.message}`,
-          details: error.details || error.hint 
-        },
-        { status: 500 }
-      );
-    }
+    if (dbError) throw dbError;
 
     return NextResponse.json({
       success: true,
-      data,
-      message: 'Frame uploaded successfully',
+      data: frame,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error creating frame:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to create frame',
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// PATCH - Update frame
+export async function PATCH(request: NextRequest) {
+  try {
+    const { id, updates } = await request.json();
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: 'Frame ID is required' },
+        { status: 400 }
+      );
+    }
+
+    const { data: frame, error:  dbError } = await supabaseAdmin
+      .from('frames')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (dbError) throw dbError;
+
+    return NextResponse.json({
+      success: true,
+      data: frame,
+    });
+  } catch (error) {
+    console.error('Error updating frame:', error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update frame',
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE - Delete frame
+export async function DELETE(request: NextRequest) {
+  try {
+    const searchParams = request.nextUrl.searchParams;
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error:  'Frame ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // Get frame to delete from Cloudinary
+    const { data:  frame, error: fetchError } = await supabaseAdmin
+      .from('frames')
+      .select('cloudinary_public_id')
+      .eq('id', id)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    // Delete from Cloudinary
+    if (frame?. cloudinary_public_id) {
+      try {
+        await deleteFromCloudinary(frame.cloudinary_public_id);
+      } catch (cloudinaryError) {
+        console.error('Error deleting from Cloudinary:', cloudinaryError);
+        // Continue with database deletion even if Cloudinary fails
+      }
+    }
+
+    // Delete from database
+    const { error: dbError } = await supabaseAdmin
+      .from('frames')
+      .delete()
+      .eq('id', id);
+
+    if (dbError) throw dbError;
+
+    return NextResponse.json({
+      success: true,
+      message: 'Frame deleted successfully',
+    });
+  } catch (error) {
+    console.error('Error deleting frame:', error);
+    return NextResponse.json(
+      {
+        success: false,
+        error:  error instanceof Error ? error.message :  'Failed to delete frame',
+      },
       { status: 500 }
     );
   }
