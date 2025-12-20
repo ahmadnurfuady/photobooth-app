@@ -118,7 +118,7 @@ export const FrameList:  React.FC<FrameListProps> = ({ initialFrames = [], onRef
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-1">
         {[...Array(8)].map((_, i) => (
           <SkeletonCard key={i} />
         ))}
@@ -200,7 +200,7 @@ export const FrameList:  React.FC<FrameListProps> = ({ initialFrames = [], onRef
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredFrames.map((frame) => (
             <FrameCard
               key={frame.id}

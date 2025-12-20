@@ -85,7 +85,7 @@ export const FrameCard: React.FC<FrameCardProps> = ({ frame, onUpdate, onDelete 
                 src={ frame.cloudinary_url}
                 alt={frame.name}
                 className="max-w-full h-auto object-contain"
-                style={{ maxHeight:  '500px', maxWidth: '300px' }} 
+                style={{ maxHeight:  '200px', maxWidth: '75px' }} 
             />
           
           {/* Status Badge */}
