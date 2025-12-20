@@ -117,7 +117,7 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
     }
     
     if (!frameDimensions) {
-      toast.error('Loading frame dimensions...');
+      toast.error('Please wait for frame image to load');
       return;
     }
     

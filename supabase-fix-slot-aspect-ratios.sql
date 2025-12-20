@@ -8,16 +8,25 @@
 -- Result: landscape slots (1.5 aspect ratio) were rendering as portrait (0.5 aspect ratio)
 
 -- Fix slots for frames with aspect_ratio = 1.5 (landscape photos)
--- Assumes typical portrait frame dimensions: 1088 × 3264 pixels
--- For each slot: recalculate height% to maintain aspect ratio 1.5
+-- 
+-- IMPORTANT: This migration uses hardcoded frame dimensions (1088 × 3264 pixels)
+-- These are the typical dimensions for portrait-oriented photobooth frames.
+-- 
+-- LIMITATIONS:
+-- - If your frames have different dimensions, you'll need to adjust frame_width and frame_height
+-- - Alternatively, you could query actual frame dimensions from your image storage (e.g., Cloudinary)
+-- - The migration will work correctly if all frames have the same aspect ratio (2:3)
+-- - For frames with different dimensions, consider running this migration per frame size
+--
+-- For each slot: recalculate height% to maintain aspect ratio from frame_config
 
 DO $$
 DECLARE
   frame_record RECORD;
   slot_record JSONB;
   updated_slots JSONB := '[]'::jsonb;
-  frame_width NUMERIC := 1088;  -- Typical portrait frame width
-  frame_height NUMERIC := 3264; -- Typical portrait frame height
+  frame_width NUMERIC := 1088;  -- Default portrait frame width (adjust if needed)
+  frame_height NUMERIC := 3264; -- Default portrait frame height (adjust if needed)
   target_aspect_ratio NUMERIC;
   width_percent NUMERIC;
   width_pixels NUMERIC;

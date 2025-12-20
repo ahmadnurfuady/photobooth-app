@@ -114,11 +114,11 @@ export async function createPhotoStripWithFrame(
             const slotHeight = Math.round((s.height / 100) * frameHeight);
             const aspectRatio = slotWidth / slotHeight;
 
-            console.log(`📍 Slot ${index + 1} conversion:`, {
+            console.log(`Slot ${index + 1} conversion:`, {
               percent: `${s.width.toFixed(2)}% × ${s.height.toFixed(2)}%`,
               pixels: `${slotWidth}px × ${slotHeight}px`,
               aspectRatio: aspectRatio.toFixed(3),
-              orientation: aspectRatio > 1 ? 'landscape ✅' : 'portrait ❌',
+              orientation: aspectRatio > 1 ? 'landscape (OK)' : 'portrait (ERROR)',
             });
 
             return {

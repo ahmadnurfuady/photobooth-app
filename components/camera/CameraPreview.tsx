@@ -213,17 +213,17 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
       console.log('  Frame dimensions:', FRAME_WIDTH, '×', FRAME_HEIGHT);
       console.log('  Slot pixels:', slotPixelWidth.toFixed(0), '×', slotPixelHeight.toFixed(0));
       console.log('  Slot Aspect Ratio:', slotAspectRatio.toFixed(3));
-      console.log('  Green Box:', cropWidth. toFixed(0), '×', cropHeight.toFixed(0), 'px');
+      console.log('  Green Box:', cropWidth.toFixed(0), '×', cropHeight.toFixed(0), 'px');
       console.log('  Canvas:', canvas.width, '×', canvas.height);
-      console.log('  Canvas Aspect Ratio:', (canvas. width / canvas.height).toFixed(3));
-      console.log('  Match:', Math.abs(slotAspectRatio - (canvas.width / canvas.height)) < 0.01 ? '✅' : '⚠️ MISMATCH!');
+      console.log('  Canvas Aspect Ratio:', (canvas.width / canvas.height).toFixed(3));
+      console.log('  Match:', Math.abs(slotAspectRatio - (canvas.width / canvas.height)) < 0.01 ? 'YES' : 'NO - MISMATCH!');
 
       // Load full webcam image
       const img = new Image();
       img.onload = () => {
         // Calculate scale from webcam resolution to container
         const scaleX = img.width / containerWidth;
-        const scaleY = img.  height / containerHeight;
+        const scaleY = img.height / containerHeight;
 
         // Draw the area inside green box to canvas
         // Scale it to fit canvas while maintaining aspect ratio
@@ -242,10 +242,10 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
         // Convert to base64
         const croppedImage = canvas.toDataURL('image/jpeg', 0.92);
         
-        console.log('✅ Photo captured! ');
+        console.log('Photo captured successfully');
         console.log('  Final aspect ratio:', (canvas.width / canvas.height).toFixed(3));
-        console.log('  Expected:', slotAspectRatio. toFixed(3));
-        console.log('  Difference:', Math.  abs(slotAspectRatio - (canvas.width / canvas.height)).toFixed(4));
+        console.log('  Expected:', slotAspectRatio.toFixed(3));
+        console.log('  Difference:', Math.abs(slotAspectRatio - (canvas.width / canvas.height)).toFixed(4));
         
         onCapture(croppedImage);
       };
