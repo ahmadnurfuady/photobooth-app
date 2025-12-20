@@ -45,6 +45,9 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
   const [dragging, setDragging] = useState<number | null>(null);
   const [resizing, setResizing] = useState<number | null>(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  
+  // Store actual frame image dimensions
+  const [frameDimensions, setFrameDimensions] = useState<{ width: number; height: number } | null>(null);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -58,14 +61,48 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
     setSelectedFile(file);
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
+    
+    // Load image to get actual dimensions
+    const img = new Image();
+    img.onload = () => {
+      setFrameDimensions({ width: img.width, height: img.height });
+      console.log('🖼️ Frame image dimensions:', img.width, '×', img.height);
+      console.log('🖼️ Frame aspect ratio:', (img.width / img.height).toFixed(3));
+    };
+    img.src = url;
   };
 
   // Handle photo count change - regenerate slots with new preset
   const handlePhotoCountChange = (count: 1 | 2 | 3 | 4) => {
     setSelectedPhotoCount(count);
     const preset = FRAME_PRESETS[count];
-    const newSlots = generateDefaultSlots(preset);
+    const newSlots = generateSlotsWithCorrectAspectRatio(preset, frameDimensions);
     setPhotoSlots(newSlots);
+  };
+  
+  // Generate slots with correct aspect ratio based on actual frame dimensions
+  const generateSlotsWithCorrectAspectRatio = (
+    preset: typeof FRAME_PRESETS[1],
+    frameDims: { width: number; height: number } | null
+  ): PhotoSlot[] => {
+    const defaultSlots = generateDefaultSlots(preset);
+    
+    if (!frameDims) {
+      // No frame dimensions yet, return default slots
+      return defaultSlots;
+    }
+    
+    // Fix each slot's height percentage to maintain aspect ratio in pixels
+    return defaultSlots.map(slot => {
+      const widthPixels = (slot.width / 100) * frameDims.width;
+      const heightPixels = widthPixels / preset.aspectRatio;
+      const heightPercent = (heightPixels / frameDims.height) * 100;
+      
+      return {
+        ...slot,
+        height: heightPercent,
+      };
+    });
   };
 
   const handleNext = () => {
@@ -78,6 +115,15 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
       toast.error('Please select frame image');
       return;
     }
+    
+    if (!frameDimensions) {
+      toast.error('Loading frame dimensions...');
+      return;
+    }
+    
+    // Regenerate slots with correct aspect ratio when moving to position step
+    const correctedSlots = generateSlotsWithCorrectAspectRatio(selectedPreset, frameDimensions);
+    setPhotoSlots(correctedSlots);
 
     setStep('position');
   };
@@ -87,10 +133,32 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
   };
 
   const handleSaveFrame = async () => {
-    if (!selectedFile || !frameName.trim()) return;
+    if (!selectedFile || !frameName.trim() || !frameDimensions) return;
 
     setLoading(true);
     try {
+      // ✅ Validate slot aspect ratios before saving
+      console.log('🔍 Validating slot aspect ratios before save:');
+      photoSlots.forEach((slot, index) => {
+        const widthPixels = (slot.width / 100) * frameDimensions.width;
+        const heightPixels = (slot.height / 100) * frameDimensions.height;
+        const actualRatio = widthPixels / heightPixels;
+        const expectedRatio = selectedPreset.aspectRatio;
+        const match = Math.abs(actualRatio - expectedRatio) < 0.01;
+        
+        console.log(`  Slot ${index + 1}:`, {
+          percent: `${slot.width.toFixed(2)}% × ${slot.height.toFixed(2)}%`,
+          pixels: `${widthPixels.toFixed(0)}px × ${heightPixels.toFixed(0)}px`,
+          actualRatio: actualRatio.toFixed(3),
+          expectedRatio: expectedRatio.toFixed(3),
+          match: match ? '✅' : '❌'
+        });
+        
+        if (!match) {
+          console.warn(`⚠️ Slot ${index + 1} aspect ratio mismatch!`);
+        }
+      });
+      
       const frameConfig: FrameConfig = {
         photo_count: selectedPhotoCount,
         layout: selectedPreset.layout,
@@ -164,6 +232,7 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
 
     if (resizing !== null) {
       // Resizing with LOCKED ASPECT RATIO
+      // ✅ CRITICAL FIX: Account for actual frame dimensions when calculating percentages
       setPhotoSlots(prev =>
         prev.map(slot => {
           if (slot.id !== resizing) return slot;
@@ -171,14 +240,36 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
           // Calculate new width based on horizontal drag
           const newWidth = Math.max(10, Math.min(100 - slot.x, slot.width + deltaX));
           
-          // Calculate new height based on LOCKED aspect ratio
+          // ✅ Calculate new height to maintain aspect ratio in PIXELS, not percentages
           const lockedAspectRatio = selectedPreset.aspectRatio;
-          const newHeight = newWidth / lockedAspectRatio;
           
-          // Ensure height doesn't exceed bounds
-          const maxHeight = 100 - slot.y;
-          const finalHeight = Math.min(newHeight, maxHeight);
-          const finalWidth = finalHeight * lockedAspectRatio;
+          let finalWidth: number;
+          let finalHeight: number;
+          
+          if (frameDimensions) {
+            // Use actual frame dimensions for correct aspect ratio
+            // width_pixels = newWidth% * frameWidth
+            // height_pixels = width_pixels / aspectRatio
+            // height% = height_pixels / frameHeight * 100
+            const widthPixels = (newWidth / 100) * frameDimensions.width;
+            const heightPixels = widthPixels / lockedAspectRatio;
+            const newHeight = (heightPixels / frameDimensions.height) * 100;
+            
+            // Ensure height doesn't exceed bounds
+            const maxHeight = 100 - slot.y;
+            finalHeight = Math.min(newHeight, maxHeight);
+            
+            // Recalculate width to maintain aspect ratio if height was capped
+            const finalHeightPixels = (finalHeight / 100) * frameDimensions.height;
+            const finalWidthPixels = finalHeightPixels * lockedAspectRatio;
+            finalWidth = (finalWidthPixels / frameDimensions.width) * 100;
+          } else {
+            // Fallback: assume square frame (this will be corrected when saved)
+            const newHeight = newWidth / lockedAspectRatio;
+            const maxHeight = 100 - slot.y;
+            finalHeight = Math.min(newHeight, maxHeight);
+            finalWidth = finalHeight * lockedAspectRatio;
+          }
 
           return {
             ...slot,
