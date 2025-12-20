@@ -1,5 +1,5 @@
 // lib/imageProcessing.ts
-import type { FrameLayoutSettings } from '@/types';
+import type { PhotoSlot } from '@/types';
 
 /**
  * Apply frame overlay to photo using Canvas API
@@ -59,20 +59,12 @@ export async function applyFrameToPhoto(
 
 /**
  * Create composite image with 3 photos in 1 frame (vertical strip)
- * Photo 1: Top slot
- * Photo 2: Middle slot
- * Photo 3: Bottom slot
- */
-// lib/imageProcessing.ts
-
-/**
- * Create composite image with 3 photos in 1 frame (vertical strip)
- * IMPROVED: Better positioning & clipping with custom layout settings
+ * Uses PhotoSlot[] configuration from admin with CORRECT aspect ratios
  */
 export async function createPhotoStripWithFrame(
   photos: string[],
   frameSrc: string,
-  layoutSettings?: FrameLayoutSettings
+  photoSlots?: PhotoSlot[] | null
 ): Promise<string> {
   return new Promise(async (resolve, reject) => {
     try {
@@ -98,83 +90,107 @@ export async function createPhotoStripWithFrame(
         canvas.width = frameImg.width;
         canvas.height = frameImg.height;
 
-        // Calculate photo slots using custom or default settings
+        console.log('🖼️  Frame size:', canvas.width, '×', canvas.height);
+
+        // Calculate photo slots in pixels
         const frameWidth = canvas.width;
         const frameHeight = canvas.height;
 
-        let photoSlots: Array<{ x: number; y: number; width: number; height: number; radius?: number }>; 
+        let slots: Array<{ 
+          x: number; 
+          y: number; 
+          width: number; 
+          height: number;
+          aspectRatio: number;
+        }>;
 
-        if ((layoutSettings as FrameLayoutSettings | undefined)?.slots && (layoutSettings as FrameLayoutSettings).slots!.length === 3) {
-          // Use explicit percent-based slots from settings
-          photoSlots = (layoutSettings as FrameLayoutSettings).slots!.map((s: { x: number; y: number; width: number; height: number; radius?: number }) => ({
-            x: Math.round((s.x / 100) * frameWidth),
-            y: Math.round((s.y / 100) * frameHeight),
-            width: Math.round((s.width / 100) * frameWidth),
-            height: Math.round((s.height / 100) * frameHeight),
-            radius: s.radius,
-          }));
+        if (photoSlots && photoSlots.length === 3) {
+          // Use custom slots from admin (convert % to pixels)
+          slots = photoSlots.map((s, index) => {
+            const slotX = Math.round((s.x / 100) * frameWidth);
+            const slotY = Math.round((s.y / 100) * frameHeight);
+            const slotWidth = Math.round((s.width / 100) * frameWidth);
+            const slotHeight = Math.round((s.height / 100) * frameHeight);
+            const aspectRatio = slotWidth / slotHeight;
+
+            console.log(`📍 Slot ${index + 1} (from database):`, {
+              percent: `${s.x}%, ${s.y}%, ${s.width}% × ${s.height}%`,
+              pixels: `(${slotX}, ${slotY}), ${slotWidth}px × ${slotHeight}px`,
+              aspectRatio: aspectRatio.toFixed(3),
+            });
+
+            return {
+              x: slotX,
+              y: slotY,
+              width: slotWidth,
+              height: slotHeight,
+              aspectRatio,
+            };
+          });
         } else {
-          // Fallback to padding-based layout
-          const settings: FrameLayoutSettings = layoutSettings || {
-            sidePadding: 12,
-            verticalPadding: 6,
-            gapBetweenPhotos: 4,
-          };
-
-          const sidePadding = Math.floor(frameWidth * (((settings.sidePadding ?? 12)) / 100));
-          const verticalPadding = Math.floor(frameHeight * (((settings.verticalPadding ?? 6)) / 100));
-          const gapBetweenPhotos = Math.floor(frameHeight * (((settings.gapBetweenPhotos ?? 4)) / 100));
+          // Fallback: Default 3 equal vertical slots
+          console.warn('⚠️ No photo_slots found, using default layout');
+          const sidePadding = Math.floor(frameWidth * 0.08);
+          const verticalPadding = Math.floor(frameHeight * 0.06);
+          const gap = Math.floor(frameHeight * 0.03);
           
           const photoWidth = frameWidth - (sidePadding * 2);
-          const availableHeight = frameHeight - (verticalPadding * 2) - (gapBetweenPhotos * 2);
+          const availableHeight = frameHeight - (verticalPadding * 2) - (gap * 2);
           const photoHeight = Math.floor(availableHeight / 3);
 
-          photoSlots = [
-            { x: sidePadding, y: verticalPadding, width: photoWidth, height: photoHeight },
-            { x: sidePadding, y: verticalPadding + photoHeight + gapBetweenPhotos, width: photoWidth, height: photoHeight },
-            { x: sidePadding, y: verticalPadding + (photoHeight * 2) + (gapBetweenPhotos * 2), width: photoWidth, height: photoHeight },
+          slots = [
+            { 
+              x: sidePadding, 
+              y: verticalPadding, 
+              width: photoWidth, 
+              height: photoHeight,
+              aspectRatio: photoWidth / photoHeight,
+            },
+            { 
+              x: sidePadding, 
+              y: verticalPadding + photoHeight + gap, 
+              width: photoWidth, 
+              height: photoHeight,
+              aspectRatio: photoWidth / photoHeight,
+            },
+            { 
+              x: sidePadding, 
+              y: verticalPadding + (photoHeight * 2) + (gap * 2), 
+              width: photoWidth, 
+              height: photoHeight,
+              aspectRatio: photoWidth / photoHeight,
+            },
           ];
         }
 
-        // Fill background with frame color (light blue/white)
+        // Fill background
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Load and draw all photos with proper clipping
-        const loadAndDrawPhoto = (src: string, slot: typeof photoSlots[0]): Promise<void> => {
+        // Load and draw photo - COVER MODE (FIXED)
+        const loadAndDrawPhoto = (
+          src: string, 
+          slot: typeof slots[0],
+          index: number
+        ): Promise<void> => {
           return new Promise((resolvePhoto, rejectPhoto) => {
             const img = new Image();
             img.crossOrigin = 'anonymous';
             
             img.onload = () => {
-              // Calculate aspect ratios
-              const imgAspect = img.width / img.height;
-              const slotAspect = slot.width / slot.height;
+              console.log(`📸 Photo ${index} loaded:`, img.width, '×', img.height, `(ratio: ${(img.width / img.height).toFixed(3)})`);
               
-              let drawWidth, drawHeight, drawX, drawY;
-              
-              // Cover fit (fill the slot completely)
-              if (imgAspect > slotAspect) {
-                // Image wider - fit to height
-                drawHeight = slot.height;
-                drawWidth = drawHeight * imgAspect;
-                drawX = slot.x - (drawWidth - slot.width) / 2;
-                drawY = slot.y;
-              } else {
-                // Image taller - fit to width
-                drawWidth = slot.width;
-                drawHeight = drawWidth / imgAspect;
-                drawX = slot.x;
-                drawY = slot.y - (drawHeight - slot.height) / 2;
-              }
+              const photoAspectRatio = img.width / img.height;
+              const slotAspectRatio = slot.aspectRatio;
+
+              console.log(`  Slot aspect ratio: ${slotAspectRatio.toFixed(3)}`);
+              console.log(`  Photo aspect ratio: ${photoAspectRatio.toFixed(3)}`);
 
               // Save context
               ctx.save();
               
-              // Create clipping region with rounded corners
-              const cornerRadius = (slot.radius !== undefined)
-                ? (Math.min(slot.width, slot.height) * (slot.radius / 100))
-                : (Math.min(slot.width, slot.height) * 0.08); // default 8%
+              // Create clipping region for slot (rounded corners)
+              const cornerRadius = Math.min(slot.width, slot.height) * 0.05;
               ctx.beginPath();
               ctx.moveTo(slot.x + cornerRadius, slot.y);
               ctx.lineTo(slot.x + slot.width - cornerRadius, slot.y);
@@ -188,33 +204,69 @@ export async function createPhotoStripWithFrame(
               ctx.closePath();
               ctx.clip();
               
-              // Draw image
+              // ✅ COVER MODE: Fill slot completely while maintaining aspect ratio
+              let drawWidth, drawHeight, drawX, drawY;
+
+              // Calculate scale factors for both dimensions
+              const scaleX = slot.width / img.width;
+              const scaleY = slot.height / img.height;
+              
+              // Use the LARGER scale to ensure full coverage
+              // Add 3% safety margin to guarantee no white space
+              const scale = Math.max(scaleX, scaleY) * 1.03;
+              
+              // Calculate final dimensions (rounded up)
+              drawWidth = Math.ceil(img.width * scale);
+              drawHeight = Math.ceil(img.height * scale);
+              
+              // Center the image in the slot
+              drawX = slot.x + Math.floor((slot.width - drawWidth) / 2);
+              drawY = slot.y + Math.floor((slot.height - drawHeight) / 2);
+              
+              console.log(`  📐 Scale factors: X=${scaleX.toFixed(3)}, Y=${scaleY.toFixed(3)}`);
+              console.log(`  📐 Final scale (with 3% margin): ${scale.toFixed(3)}`);
+              console.log(`  ${scaleY > scaleX ? '📏 FIT HEIGHT (crop width)' : '📏 FIT WIDTH (crop height)'}`);
+              console.log(`  📍 Slot: (${slot.x}, ${slot.y}), ${slot.width}×${slot.height}px`);
+              console.log(`  🖼️  Draw: (${drawX}, ${drawY}), ${drawWidth}×${drawHeight}px`);
+              console.log(`  🎯 Offset: X=${(slot.width - drawWidth) / 2}, Y=${(slot.height - drawHeight) / 2}`);
+              console.log(`  ✅ Coverage: ${drawWidth >= slot.width && drawHeight >= slot.height ? 'Full' : 'Partial'}`);
+              
+              // Draw image (will be cropped by clip region)
               ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+              
+              console.log(`  Draw position: (${drawX.toFixed(0)}, ${drawY.toFixed(0)})`);
+              console.log(`  Draw size: ${drawWidth.toFixed(0)}px × ${drawHeight.toFixed(0)}px`);
+              console.log(`  Slot size: ${slot.width}px × ${slot.height}px`);
+              console.log(`  Coverage: ${drawWidth >= slot.width && drawHeight >= slot.height ? '✅ Full' : '❌ Partial'}`);
               
               // Restore context
               ctx.restore();
 
+              // Resolve promise
               resolvePhoto();
             };
 
-            img.onerror = () => rejectPhoto(new Error('Failed to load photo'));
+            img.onerror = () => rejectPhoto(new Error(`Failed to load photo ${index}`));
             img.src = src;
           });
         };
 
         // Draw all 3 photos sequentially
         try {
-          await loadAndDrawPhoto(photos[0], photoSlots[0]);
-          await loadAndDrawPhoto(photos[1], photoSlots[1]);
-          await loadAndDrawPhoto(photos[2], photoSlots[2]);
+          await loadAndDrawPhoto(photos[0], slots[0], 1);
+          await loadAndDrawPhoto(photos[1], slots[1], 2);
+          await loadAndDrawPhoto(photos[2], slots[2], 3);
 
           // Draw frame overlay on top
           ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
+
+          console.log('✅ Composite created successfully');
 
           // Convert to base64
           const result = canvas.toDataURL('image/jpeg', 0.95);
           resolve(result);
         } catch (error) {
+          console.error('❌ Error drawing photos:', error);
           reject(error);
         }
       };
@@ -229,27 +281,26 @@ export async function createPhotoStripWithFrame(
     }
   });
 }
+
 /**
- * Generate GIF from multiple photos (WITHOUT FRAME - original photos only)
+ * Generate GIF from multiple photos (WITHOUT FRAME)
  */
 export async function generateGIF(photos: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    // Dynamic import gifshot (client-side only)
     import('gifshot').then((gifshot) => {
       gifshot.createGIF(
         {
-          images: photos, // Original photos WITHOUT frame
-          gifWidth: 400, // Reduced from 600
-          gifHeight: 533, // Reduced from 800 (maintains 3:4 ratio)
-          interval: 0.5, // Faster animation - 0.5 seconds per frame
+          images: photos,
+          gifWidth: 400,
+          gifHeight: 533,
+          interval: 0.5,
           numFrames: photos.length,
-          frameDuration: 5, // 0.5s * 10 = 5
-          sampleInterval: 15, // Increased from 10 for better compression
+          frameDuration: 5,
+          sampleInterval: 15,
           numWorkers: 2,
         },
         (obj) => {
           if (!obj.error) {
-            // Validate the GIF data
             if (!obj.image || !obj.image.startsWith('data:image/gif')) {
               reject(new Error('Invalid GIF data generated'));
               return;
@@ -265,7 +316,7 @@ export async function generateGIF(photos: string[]): Promise<string> {
 }
 
 /**
- * Convert base64 to Blob for upload
+ * Convert base64 to Blob
  */
 export function base64ToBlob(base64: string, contentType: string = 'image/jpeg'): Blob {
   const byteCharacters = atob(base64.split(',')[1]);
@@ -299,7 +350,7 @@ export function downloadBase64Image(base64: string, filename: string) {
 }
 
 /**
- * Download blob as file
+ * Download blob
  */
 export function downloadBlob(blob: Blob, filename: string) {
   const url = window.URL.createObjectURL(blob);

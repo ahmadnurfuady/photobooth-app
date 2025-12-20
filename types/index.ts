@@ -1,23 +1,15 @@
 // types/index.ts
 
-export interface FrameSlot {
-  // Percent-based rectangle relative to frame image
-  x: number; // 0-100
-  y: number; // 0-100
-  width: number; // 0-100
-  height: number; // 0-100
-  radius?: number; // corner radius percent of min(width,height)
+// Photo slot configuration (used by admin to set photo positions)
+export interface PhotoSlot {
+  id: number;  // 1, 2, 3
+  x: number;   // % from left (0-100)
+  y: number;   // % from top (0-100)
+  width:  number;   // % of frame width (0-100)
+  height: number;  // % of frame height (0-100)
 }
 
-export interface FrameLayoutSettings {
-  // Simple padding-based layout
-  sidePadding?: number; // Percentage (e.g., 12 = 12%)
-  verticalPadding?: number; // Percentage
-  gapBetweenPhotos?: number; // Percentage
-  // Advanced explicit slots layout (3 slots expected)
-  slots?: [FrameSlot, FrameSlot, FrameSlot];
-}
-
+// Frame interface
 export interface Frame {
   id: string;
   name: string;
@@ -25,17 +17,19 @@ export interface Frame {
   cloudinary_public_id: string;
   thumbnail_url: string | null;
   is_active: boolean;
-  layout_settings: FrameLayoutSettings | null;
+  photo_slots? :  PhotoSlot[] | null;  // Photo slot positions from admin
   created_at: string;
   updated_at: string;
 }
 
+// Photo data in session
 export interface PhotoData {
   url: string;
   public_id: string;
-  order: number;
+  order:  number;
 }
 
+// Photo session
 export interface PhotoSession {
   id: string;
   frame_id: string;
@@ -46,11 +40,12 @@ export interface PhotoSession {
   composite_public_id: string | null;
   gif_url: string | null;
   gif_public_id: string | null;
-  photo_count: number;
+  photo_count:   number;
   files_deleted: boolean;
-  deleted_at: string | null;
+  deleted_at:   string | null;
 }
 
+// Cloudinary upload result
 export interface CloudinaryUploadResult {
   url: string;
   public_id: string;
@@ -62,6 +57,7 @@ export interface CloudinaryUploadResult {
   created_at: string;
 }
 
+// API response
 export interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
@@ -69,20 +65,9 @@ export interface ApiResponse<T = any> {
   message?: string;
 }
 
+// User
 export interface User {
   uid: string;
   email: string | null;
-  displayName?:  string | null;
-}
-
-// types/index.ts
-
-// ...  (existing types)
-
-export interface PhotoSlot {
-  id: number;  // 1, 2, 3
-  x: number;   // % from left
-  y: number;   // % from top
-  width:  number;   // % of frame width
-  height: number;  // % of frame height
+  displayName? :  string | null;
 }

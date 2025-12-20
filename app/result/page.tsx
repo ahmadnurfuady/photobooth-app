@@ -68,7 +68,7 @@ export default function ResultPage() {
       const composite = await createPhotoStripWithFrame(
         photos, 
         frame.cloudinary_url,
-        frame.layout_settings || undefined
+        frame. photo_slots || undefined  // ✅ Pakai photo_slots
       );
       setCompositePhoto(composite);
       setProgress(40);
