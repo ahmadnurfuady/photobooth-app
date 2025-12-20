@@ -22,12 +22,12 @@ export const FRAME_PRESETS: Record<number, FramePreset> = {
   1: {
     photoCount: 1,
     layout: 'single',
-    aspectRatio: 3 / 4, // 0.75 - Portrait
-    name: '1 Photo (Portrait)',
-    description: 'Single portrait photo',
+    aspectRatio: 4 / 3, // 1.333 - Landscape
+    name: '1 Photo (Landscape)',
+    description: 'Single landscape photo',
     defaultSlotSize: {
       width: 60,
-      height: 80,
+      height: 45, // 60 / (4/3) = 45 to maintain 4:3 ratio
     },
   },
   2: {
@@ -38,29 +38,29 @@ export const FRAME_PRESETS: Record<number, FramePreset> = {
     description: 'Two photos stacked vertically',
     defaultSlotSize: {
       width: 80,
-      height: 30,
+      height: 60, // 80 / (4/3) = 60 to maintain 4:3 ratio
     },
   },
   3: {
     photoCount: 3,
     layout: 'strip',
-    aspectRatio: 1.5, // 1.5 - Classic strip (landscape)
+    aspectRatio: 4 / 3, // 1.333 - Landscape (4:3)
     name: '3 Photos (Classic Strip)',
     description: 'Classic photo strip layout',
     defaultSlotSize: {
       width: 80,
-      height: 26.67, // 80 / 1.5 / 2 ≈ 26.67 to fit 3 photos with gaps
+      height: 60, // 80 / (4/3) = 60 to maintain 4:3 ratio
     },
   },
   4: {
     photoCount: 4,
     layout: 'grid',
-    aspectRatio: 1, // 1.0 - Square
-    name: '4 Photos (Square Grid)',
-    description: '2×2 grid of photos',
+    aspectRatio: 4 / 3, // 1.333 - Landscape (4:3)
+    name: '4 Photos (Landscape Grid)',
+    description: '2×2 grid of landscape photos',
     defaultSlotSize: {
       width: 40,
-      height: 40,
+      height: 30, // 40 / (4/3) = 30 to maintain 4:3 ratio
     },
   },
 };
