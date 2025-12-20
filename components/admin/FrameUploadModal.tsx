@@ -369,7 +369,7 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
                       {/* Resize Handle */}
                       <div
                         className="absolute bottom-0 right-0 w-4 h-4 bg-green-600 cursor-se-resize"
-                        onMouseDown={(e) => handleMouseDown(slot. id, true, e)}
+                        onMouseDown={(e) => handleMouseDown(slot.id, true, e)}
                       />
                     </div>
                   );
@@ -378,12 +378,12 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
 
               {/* Slot Info with Aspect Ratio */}
               <div className={`grid gap-4 text-xs ${selectedPhotoCount === 4 ? 'grid-cols-4' : selectedPhotoCount === 3 ? 'grid-cols-3' : selectedPhotoCount === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                {photoSlots. map((slot) => {
+                {photoSlots.map((slot) => {
                   const slotAspectRatio = slot.width / slot.height;
                   return (
                     <div key={slot.id} className="bg-gray-100 p-3 rounded-lg">
                       <p className="font-semibold mb-1">Photo {slot.id}</p>
-                      <p>X: {slot.x. toFixed(1)}%</p>
+                      <p>X: {slot.x.toFixed(1)}%</p>
                       <p>Y: {slot.y.toFixed(1)}%</p>
                       <p>W: {slot.width.toFixed(1)}%</p>
                       <p>H: {slot.height.toFixed(1)}%</p>

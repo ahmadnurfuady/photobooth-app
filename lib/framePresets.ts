@@ -1,8 +1,6 @@
 // lib/framePresets.ts
 
-import { PhotoSlot } from '@/types';
-
-export type FrameLayout = 'single' | 'vertical' | 'strip' | 'grid';
+import { PhotoSlot, FrameLayout } from '@/types';
 
 export interface FramePreset {
   photoCount: 1 | 2 | 3 | 4;
