@@ -15,6 +15,17 @@ export interface FramePreset {
 }
 
 /**
+ * Fixed slot dimensions (% of canvas) - 4:3 aspect ratio
+ * Sizes decrease as photo count increases
+ */
+export const FIXED_SLOT_SIZES = {
+  1: { width: 70, height: 52.5 },  // 70/52.5 = 1.333 (4:3)
+  2: { width: 65, height: 48.75 }, // 65/48.75 = 1.333 (4:3)
+  3: { width: 60, height: 45 },    // 60/45 = 1.333 (4:3)
+  4: { width: 55, height: 41.25 }, // 55/41.25 = 1.333 (4:3)
+};
+
+/**
  * Frame presets with locked aspect ratios
  * Each preset defines photo count, layout, and aspect ratio
  */
@@ -26,8 +37,8 @@ export const FRAME_PRESETS: Record<number, FramePreset> = {
     name: '1 Photo (Landscape)',
     description: 'Single landscape photo',
     defaultSlotSize: {
-      width: 60,
-      height: 45, // 60 / (4/3) = 45 to maintain 4:3 ratio
+      width: FIXED_SLOT_SIZES[1].width,
+      height: FIXED_SLOT_SIZES[1].height,
     },
   },
   2: {
@@ -37,8 +48,8 @@ export const FRAME_PRESETS: Record<number, FramePreset> = {
     name: '2 Photos (Landscape)',
     description: 'Two photos stacked vertically',
     defaultSlotSize: {
-      width: 80,
-      height: 60, // 80 / (4/3) = 60 to maintain 4:3 ratio
+      width: FIXED_SLOT_SIZES[2].width,
+      height: FIXED_SLOT_SIZES[2].height,
     },
   },
   3: {
@@ -48,8 +59,8 @@ export const FRAME_PRESETS: Record<number, FramePreset> = {
     name: '3 Photos (Classic Strip)',
     description: 'Classic photo strip layout',
     defaultSlotSize: {
-      width: 80,
-      height: 60, // 80 / (4/3) = 60 to maintain 4:3 ratio
+      width: FIXED_SLOT_SIZES[3].width,
+      height: FIXED_SLOT_SIZES[3].height,
     },
   },
   4: {
@@ -59,8 +70,8 @@ export const FRAME_PRESETS: Record<number, FramePreset> = {
     name: '4 Photos (Landscape Grid)',
     description: '2×2 grid of landscape photos',
     defaultSlotSize: {
-      width: 40,
-      height: 30, // 40 / (4/3) = 30 to maintain 4:3 ratio
+      width: FIXED_SLOT_SIZES[4].width,
+      height: FIXED_SLOT_SIZES[4].height,
     },
   },
 };
