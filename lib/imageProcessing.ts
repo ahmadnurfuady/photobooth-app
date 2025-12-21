@@ -3,64 +3,50 @@ import type { PhotoSlot } from '@/types';
 import { FIXED_SLOT_SIZES } from './framePresets';
 
 /**
+ * Helper: Load Image Promisified
+ */
+const loadImage = (src: string): Promise<HTMLImageElement> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = src;
+  });
+};
+
+/**
  * Apply frame overlay to photo using Canvas API
  */
 export async function applyFrameToPhoto(
   photoSrc: string,
   frameSrc: string
 ): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
+  const [photoImg, frameImg] = await Promise.all([
+    loadImage(photoSrc),
+    loadImage(frameSrc),
+  ]);
 
-    if (!ctx) {
-      reject(new Error('Failed to get canvas context'));
-      return;
-    }
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Failed to get canvas context');
 
-    // Load photo
-    const photoImg = new Image();
-    photoImg.crossOrigin = 'anonymous';
-    
-    photoImg.onload = () => {
-      // Set canvas size to photo size
-      canvas.width = photoImg.width;
-      canvas.height = photoImg.height;
+  // Set canvas size to photo size
+  canvas.width = photoImg.width;
+  canvas.height = photoImg.height;
 
-      // Draw photo
-      ctx.drawImage(photoImg, 0, 0);
+  // Draw photo
+  ctx.drawImage(photoImg, 0, 0);
 
-      // Load and draw frame
-      const frameImg = new Image();
-      frameImg.crossOrigin = 'anonymous';
-      
-      frameImg.onload = () => {
-        // Draw frame on top
-        ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
+  // Draw frame on top (Stretch frame to fit photo)
+  ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
 
-        // Convert to base64
-        const result = canvas.toDataURL('image/jpeg', 0.95);
-        resolve(result);
-      };
-
-      frameImg.onerror = () => {
-        reject(new Error('Failed to load frame image'));
-      };
-
-      frameImg.src = frameSrc;
-    };
-
-    photoImg.onerror = () => {
-      reject(new Error('Failed to load photo'));
-    };
-
-    photoImg.src = photoSrc;
-  });
+  return canvas.toDataURL('image/jpeg', 0.95);
 }
 
 /**
- * Create composite image with 3 photos in 1 frame (vertical strip)
- * Uses PhotoSlot[] configuration from admin with CORRECT aspect ratios
+ * Create composite image with photos in frame (Center Crop / Object Fit: Cover)
+ * Fixes "Stretched" issue by calculating correct crop coordinates.
  */
 export async function createPhotoStripWithFrame(
   photos: string[],
@@ -68,216 +54,120 @@ export async function createPhotoStripWithFrame(
   photoSlots?: PhotoSlot[] | null,
   photoCount?: number
 ): Promise<string> {
-  return new Promise(async (resolve, reject) => {
+  if (photos.length === 0) throw new Error('At least 1 photo required');
+
+  // 1. Load Frame Image
+  const frameImg = await loadImage(frameSrc);
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Failed to get canvas context');
+
+  // 2. Set Canvas to Frame Size
+  canvas.width = frameImg.width;
+  canvas.height = frameImg.height;
+
+  const frameWidth = canvas.width;
+  const frameHeight = canvas.height;
+
+  // 3. Determine Slot Configuration
+  // Kita hitung ulang dimensi slot dalam pixel agar akurat
+  const actualPhotoCount = photoCount || photos.length;
+  const slotSizeConfig = FIXED_SLOT_SIZES[actualPhotoCount as keyof typeof FIXED_SLOT_SIZES] || FIXED_SLOT_SIZES[3];
+  
+  // Hitung ukuran slot dalam pixel berdasarkan config preset
+  const slotPixelWidth = Math.round((slotSizeConfig.width / 100) * frameWidth);
+  const slotPixelHeight = Math.round((slotSizeConfig.height / 100) * frameHeight);
+
+  // Fallback layout jika photoSlots dari DB kosong/error
+  let slots = photoSlots;
+  
+  if (!slots || slots.length < photos.length) {
+    // Generate posisi default (Vertical Strip)
+    const gap = Math.round(frameHeight * 0.03); // 3% gap
+    // Hitung total tinggi area foto
+    const totalContentHeight = (slotPixelHeight * actualPhotoCount) + (gap * (actualPhotoCount - 1));
+    const startY = (frameHeight - totalContentHeight) / 2;
+    const startX = (frameWidth - slotPixelWidth) / 2;
+
+    slots = Array.from({ length: actualPhotoCount }).map((_, i) => ({
+      id: i + 1,
+      x: (startX / frameWidth) * 100, // Convert back to % for compatibility
+      y: ((startY + i * (slotPixelHeight + gap)) / frameHeight) * 100,
+      width: slotSizeConfig.width,
+      height: slotSizeConfig.height
+    }));
+  }
+
+  // 4. Fill Background White
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // 5. Draw Photos (With Center Crop Logic)
+  for (let i = 0; i < photos.length; i++) {
+    const photoSrc = photos[i];
+    // Gunakan slot dari array, pastikan index aman
+    const slotData = slots[i] || slots[0]; 
+
+    // Konversi posisi % ke Pixel
+    const destX = Math.round((slotData.x / 100) * frameWidth);
+    const destY = Math.round((slotData.y / 100) * frameHeight);
+    
+    // Gunakan ukuran yang sudah kita hitung (FIXED) agar konsisten
+    const destW = slotPixelWidth;
+    const destH = slotPixelHeight;
+
     try {
-      if (photos.length === 0) {
-        reject(new Error('At least 1 photo required'));
-        return;
+      const img = await loadImage(photoSrc);
+
+      // --- LOGIKA ANTI-GEPENG (Center Crop / Object Fit: Cover) ---
+      
+      // Rasio foto asli & Rasio slot tujuan
+      const imgRatio = img.width / img.height;
+      const slotRatio = destW / destH;
+
+      let sourceX = 0;
+      let sourceY = 0;
+      let sourceW = img.width;
+      let sourceH = img.height;
+
+      if (slotRatio > imgRatio) {
+        // Slot lebih lebar dari foto (Landscape slot, Portrait photo)
+        // Crop Atas & Bawah
+        sourceW = img.width;
+        sourceH = img.width / slotRatio;
+        sourceX = 0;
+        sourceY = (img.height - sourceH) / 2; // Center Vertically
+      } else {
+        // Slot lebih tinggi dari foto (Portrait slot, Landscape photo)
+        // ATAU Slot 4:3 tapi Foto sedikit beda
+        // Crop Kiri & Kanan
+        sourceH = img.height;
+        sourceW = img.height * slotRatio;
+        sourceY = 0;
+        sourceX = (img.width - sourceW) / 2; // Center Horizontally
       }
 
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
+      // Draw dengan 9 Parameter (Source Crop -> Destination)
+      ctx.drawImage(
+        img,
+        sourceX, sourceY, sourceW, sourceH, // Area yang diambil dari foto asli
+        destX, destY, destW, destH          // Area di kanvas frame
+      );
 
-      if (!ctx) {
-        reject(new Error('Failed to get canvas context'));
-        return;
-      }
-
-      // Load frame first
-      const frameImg = new Image();
-      frameImg.crossOrigin = 'anonymous';
-
-      frameImg.onload = async () => {
-        // Set canvas to frame size
-        canvas.width = frameImg.width;
-        canvas.height = frameImg.height;
-
-        console.log('🖼️  Frame size:', canvas.width, '×', canvas.height);
-
-        // Calculate photo slots in pixels
-        const frameWidth = canvas.width;
-        const frameHeight = canvas.height;
-
-        let slots: Array<{ 
-          x: number; 
-          y: number; 
-          width: number; 
-          height: number;
-          aspectRatio: number;
-        }>;
-
-        if (photoSlots && photoSlots.length >= 1) {
-          // ✅ Calculate dimensions from photo_count (FIXED 4:3 ratio)
-          const actualPhotoCount = photoCount || photos.length;
-          const slotSizeConfig = FIXED_SLOT_SIZES[actualPhotoCount as keyof typeof FIXED_SLOT_SIZES] || FIXED_SLOT_SIZES[3];
-          
-          slots = photoSlots.slice(0, photos.length).map((s, index) => {
-            const slotX = Math.round((s.x / 100) * frameWidth);
-            const slotY = Math.round((s.y / 100) * frameHeight);
-            
-            // ✅ Calculate dimensions from photo count (FIXED 4:3 ratio)
-            const slotWidth = Math.round((slotSizeConfig.width / 100) * frameWidth);
-            const slotHeight = Math.round((slotSizeConfig.height / 100) * frameHeight);
-            const aspectRatio = slotWidth / slotHeight; // Should be ~1.333
-
-            console.log(`📍 Slot ${index + 1} (from photo_count=${actualPhotoCount}):`, {
-              position: `${s.x.toFixed(1)}%, ${s.y.toFixed(1)}%`,
-              pixels: `(${slotX}, ${slotY})`,
-              dimensions: `${slotWidth}px × ${slotHeight}px`,
-              aspectRatio: aspectRatio.toFixed(3),
-              expected: '1.333',
-              match: Math.abs(aspectRatio - 1.333) < 0.01 ? '✅' : '❌',
-            });
-
-            return {
-              x: slotX,
-              y: slotY,
-              width: slotWidth,
-              height: slotHeight,
-              aspectRatio,
-            };
-          });
-        } else {
-          // Fallback: Default equal vertical slots
-          console.warn('⚠️ No photo_slots found, using default layout');
-          const sidePadding = Math.floor(frameWidth * 0.08);
-          const verticalPadding = Math.floor(frameHeight * 0.06);
-          const gap = Math.floor(frameHeight * 0.03);
-          
-          const photoWidth = frameWidth - (sidePadding * 2);
-          const availableHeight = frameHeight - (verticalPadding * 2) - (gap * (photos.length - 1));
-          const photoHeight = Math.floor(availableHeight / photos.length);
-
-          slots = photos.map((_, i) => ({
-            x: sidePadding, 
-            y: verticalPadding + i * (photoHeight + gap), 
-            width: photoWidth, 
-            height: photoHeight,
-            aspectRatio: photoWidth / photoHeight,
-          }));
-        }
-
-        // Fill background
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        // Load and draw photo - COVER MODE (FIXED)
-        const loadAndDrawPhoto = (
-          src: string, 
-          slot: typeof slots[0],
-          index: number
-        ): Promise<void> => {
-          return new Promise((resolvePhoto, rejectPhoto) => {
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            
-            img.onload = () => {
-              console.log(`📸 Photo ${index} loaded:`, img.width, '×', img.height, `(ratio: ${(img.width / img.height).toFixed(3)})`);
-              
-              const photoAspectRatio = img.width / img.height;
-              const slotAspectRatio = slot.aspectRatio;
-
-              console.log(`  Slot aspect ratio: ${slotAspectRatio.toFixed(3)}`);
-              console.log(`  Photo aspect ratio: ${photoAspectRatio.toFixed(3)}`);
-
-              // Save context
-              ctx.save();
-              
-              // Create clipping region for slot (rounded corners)
-              const cornerRadius = Math.min(slot.width, slot.height) * 0.05;
-              ctx.beginPath();
-              ctx.moveTo(slot.x + cornerRadius, slot.y);
-              ctx.lineTo(slot.x + slot.width - cornerRadius, slot.y);
-              ctx.quadraticCurveTo(slot.x + slot.width, slot.y, slot.x + slot.width, slot.y + cornerRadius);
-              ctx.lineTo(slot.x + slot.width, slot.y + slot.height - cornerRadius);
-              ctx.quadraticCurveTo(slot.x + slot.width, slot.y + slot.height, slot.x + slot.width - cornerRadius, slot.y + slot.height);
-              ctx.lineTo(slot.x + cornerRadius, slot.y + slot.height);
-              ctx.quadraticCurveTo(slot.x, slot.y + slot.height, slot.x, slot.y + slot.height - cornerRadius);
-              ctx.lineTo(slot.x, slot.y + cornerRadius);
-              ctx.quadraticCurveTo(slot.x, slot.y, slot.x + cornerRadius, slot.y);
-              ctx.closePath();
-              ctx.clip();
-              
-              // ✅ COVER MODE: Fill slot completely while maintaining aspect ratio
-              let drawWidth, drawHeight, drawX, drawY;
-
-              // Calculate scale factors for both dimensions
-              const scaleX = slot.width / img.width;
-              const scaleY = slot.height / img.height;
-              
-              // Use the LARGER scale to ensure full coverage
-              // Scale up 1.5x for better fill without over-cropping
-              const scale = Math.max(scaleX, scaleY) * 1.5;
-              
-              // Calculate final dimensions (rounded up)
-              drawWidth = Math.ceil(img.width * scale);
-              drawHeight = Math.ceil(img.height * scale);
-              
-              // Center the image in the slot
-              drawX = slot.x + Math.floor((slot.width - drawWidth) / 2);
-              drawY = slot.y + Math.floor((slot.height - drawHeight) / 2);
-              
-              console.log(`  📐 Scale factors: X=${scaleX.toFixed(3)}, Y=${scaleY.toFixed(3)}`);
-              console.log(`  📐 Final scale (with 3% margin): ${scale.toFixed(3)}`);
-              console.log(`  ${scaleY > scaleX ? '📏 FIT HEIGHT (crop width)' : '📏 FIT WIDTH (crop height)'}`);
-              console.log(`  📍 Slot: (${slot.x}, ${slot.y}), ${slot.width}×${slot.height}px`);
-              console.log(`  🖼️  Draw: (${drawX}, ${drawY}), ${drawWidth}×${drawHeight}px`);
-              console.log(`  🎯 Offset: X=${(slot.width - drawWidth) / 2}, Y=${(slot.height - drawHeight) / 2}`);
-              console.log(`  ✅ Coverage: ${drawWidth >= slot.width && drawHeight >= slot.height ? 'Full' : 'Partial'}`);
-              
-              // Draw image (will be cropped by clip region)
-              ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
-              
-              console.log(`  Draw position: (${drawX.toFixed(0)}, ${drawY.toFixed(0)})`);
-              console.log(`  Draw size: ${drawWidth.toFixed(0)}px × ${drawHeight.toFixed(0)}px`);
-              console.log(`  Slot size: ${slot.width}px × ${slot.height}px`);
-              console.log(`  Coverage: ${drawWidth >= slot.width && drawHeight >= slot.height ? '✅ Full' : '❌ Partial'}`);
-              
-              // Restore context
-              ctx.restore();
-
-              // Resolve promise
-              resolvePhoto();
-            };
-
-            img.onerror = () => rejectPhoto(new Error(`Failed to load photo ${index}`));
-            img.src = src;
-          });
-        };
-
-        // Draw all photos sequentially
-        try {
-          for (let i = 0; i < photos.length; i++) {
-            await loadAndDrawPhoto(photos[i], slots[i], i + 1);
-          }
-
-          // Draw frame overlay on top
-          ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
-
-          console.log('✅ Composite created successfully');
-
-          // Convert to base64
-          const result = canvas.toDataURL('image/jpeg', 0.95);
-          resolve(result);
-        } catch (error) {
-          console.error('❌ Error drawing photos:', error);
-          reject(error);
-        }
-      };
-
-      frameImg.onerror = () => {
-        reject(new Error('Failed to load frame'));
-      };
-
-      frameImg.src = frameSrc;
-    } catch (error) {
-      reject(error);
+    } catch (err) {
+      console.error(`Failed to draw photo ${i}`, err);
     }
-  });
+  }
+
+  // 6. Draw Frame Overlay (Transparent PNG) on Top
+  ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
+
+  return canvas.toDataURL('image/jpeg', 0.95);
 }
 
 /**
- * Generate GIF from multiple photos (WITHOUT FRAME)
+ * Generate GIF (Helper)
  */
 export async function generateGIF(photos: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -286,23 +176,13 @@ export async function generateGIF(photos: string[]): Promise<string> {
         {
           images: photos,
           gifWidth: 400,
-          gifHeight: 533,
+          gifHeight: 533, // 3:4 aspect ratio
           interval: 0.5,
           numFrames: photos.length,
-          frameDuration: 5,
-          sampleInterval: 15,
-          numWorkers: 2,
         },
         (obj) => {
-          if (!obj.error) {
-            if (!obj.image || !obj.image.startsWith('data:image/gif')) {
-              reject(new Error('Invalid GIF data generated'));
-              return;
-            }
-            resolve(obj.image);
-          } else {
-            reject(new Error(obj.errorMsg || 'Failed to create GIF'));
-          }
+          if (!obj.error) resolve(obj.image);
+          else reject(new Error(obj.errorMsg));
         }
       );
     }).catch(reject);
@@ -310,30 +190,22 @@ export async function generateGIF(photos: string[]): Promise<string> {
 }
 
 /**
- * Convert base64 to Blob
+ * Utils
  */
 export function base64ToBlob(base64: string, contentType: string = 'image/jpeg'): Blob {
   const byteCharacters = atob(base64.split(',')[1]);
   const byteArrays = [];
-
   for (let offset = 0; offset < byteCharacters.length; offset += 512) {
     const slice = byteCharacters.slice(offset, offset + 512);
     const byteNumbers = new Array(slice.length);
-
     for (let i = 0; i < slice.length; i++) {
       byteNumbers[i] = slice.charCodeAt(i);
     }
-
-    const byteArray = new Uint8Array(byteNumbers);
-    byteArrays.push(byteArray);
+    byteArrays.push(new Uint8Array(byteNumbers));
   }
-
   return new Blob(byteArrays, { type: contentType });
 }
 
-/**
- * Download base64 image
- */
 export function downloadBase64Image(base64: string, filename: string) {
   const link = document.createElement('a');
   link.href = base64;
@@ -341,18 +213,4 @@ export function downloadBase64Image(base64: string, filename: string) {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-}
-
-/**
- * Download blob
- */
-export function downloadBlob(blob: Blob, filename: string) {
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  window.URL.revokeObjectURL(url);
 }

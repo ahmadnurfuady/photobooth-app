@@ -4,7 +4,7 @@
 import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/Button';
 import { PhotoSlot, FrameConfig } from '@/types';
-import { FRAME_PRESETS, FIXED_SLOT_SIZES, generateDefaultSlots, getPreset } from '@/lib/framePresets';
+import { FRAME_PRESETS, FIXED_SLOT_SIZES, generateDefaultSlots } from '@/lib/framePresets';
 import toast from 'react-hot-toast';
 
 interface FrameUploadModalProps {
@@ -20,7 +20,7 @@ interface FrameUploadModalProps {
 
 type UploadStep = 'upload' | 'position';
 
-export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
+export const FrameUploadModal: React.FC<FrameUploadModalProps> = ({
   isOpen,
   onClose,
   onUpload,
@@ -50,9 +50,9 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (! file) return;
+    if (!file) return;
 
-    if (! file.type.startsWith('image/')) {
+    if (!file.type.startsWith('image/')) {
       toast.error('Please select an image file');
       return;
     }
@@ -61,12 +61,9 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
     
-    // Load image to get actual dimensions
     const img = new Image();
     img.onload = () => {
       setFrameDimensions({ width: img.width, height: img.height });
-      console.log('🖼️ Frame image dimensions:', img.width, '×', img.height);
-      console.log('🖼️ Frame aspect ratio:', (img.width / img.height).toFixed(3));
     };
     img.src = url;
   };
@@ -75,7 +72,6 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
   const handlePhotoCountChange = (count: 1 | 2 | 3 | 4) => {
     setSelectedPhotoCount(count);
     const preset = FRAME_PRESETS[count];
-    // Use fixed sizes from FIXED_SLOT_SIZES
     const fixedSize = FIXED_SLOT_SIZES[count];
     const newSlots = generateFixedSizeSlots(preset, fixedSize);
     setPhotoSlots(newSlots);
@@ -87,11 +83,13 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
     fixedSize: { width: number; height: number }
   ): PhotoSlot[] => {
     const slots: PhotoSlot[] = [];
-    const { photoCount, layout } = preset;
+    const { layout } = preset;
+    
+    // NOTE: Logika posisi (x,y) sederhana untuk inisialisasi awal.
+    // User bisa geser manual nanti.
     
     switch (layout) {
       case 'single':
-        // Centered single photo
         slots.push({
           id: 1,
           x: (100 - fixedSize.width) / 2,
@@ -102,32 +100,22 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
         break;
 
       case 'vertical':
-        // Two photos stacked vertically
         const verticalGap = 4;
         const verticalPadding = (100 - (fixedSize.height * 2 + verticalGap)) / 2;
         slots.push(
-          {
-            id: 1,
-            x: (100 - fixedSize.width) / 2,
-            y: verticalPadding,
-            width: fixedSize.width,
-            height: fixedSize.height,
-          },
-          {
-            id: 2,
-            x: (100 - fixedSize.width) / 2,
-            y: verticalPadding + fixedSize.height + verticalGap,
-            width: fixedSize.width,
-            height: fixedSize.height,
-          }
+          { id: 1, x: (100 - fixedSize.width) / 2, y: verticalPadding, width: fixedSize.width, height: fixedSize.height },
+          { id: 2, x: (100 - fixedSize.width) / 2, y: verticalPadding + fixedSize.height + verticalGap, width: fixedSize.width, height: fixedSize.height }
         );
         break;
 
       case 'strip':
-        // Three photos in vertical strip
+        // Handle 3 or 4 photos strip logic
         const stripGap = 3;
-        const stripPadding = (100 - (fixedSize.height * 3 + stripGap * 2)) / 2;
-        for (let i = 0; i < 3; i++) {
+        const count = preset.photoCount;
+        const totalHeight = (fixedSize.height * count) + (stripGap * (count - 1));
+        const stripPadding = (100 - totalHeight) / 2;
+        
+        for (let i = 0; i < count; i++) {
           slots.push({
             id: i + 1,
             x: (100 - fixedSize.width) / 2,
@@ -139,7 +127,7 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
         break;
 
       case 'grid':
-        // 2×2 grid with fixed size
+        // Fallback for grid logic
         const gridGap = 4;
         const gridPaddingX = (100 - (fixedSize.width * 2 + gridGap)) / 2;
         const gridPaddingY = (100 - (fixedSize.height * 2 + gridGap)) / 2;
@@ -166,18 +154,16 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
       toast.error('Please enter frame name');
       return;
     }
-
     if (!selectedFile) {
       toast.error('Please select frame image');
       return;
     }
-    
     if (!frameDimensions) {
       toast.error('Please wait for frame image to load');
       return;
     }
     
-    // Regenerate slots with fixed sizes when moving to position step
+    // Regenerate slots based on fresh selection before moving step
     const fixedSize = FIXED_SLOT_SIZES[selectedPhotoCount];
     const fixedSlots = generateFixedSizeSlots(selectedPreset, fixedSize);
     setPhotoSlots(fixedSlots);
@@ -194,22 +180,6 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
 
     setLoading(true);
     try {
-      // ✅ Save only positions (x, y) - dimensions calculated dynamically from photo_count
-      console.log('💾 Saving frame data (positions only):');
-      photoSlots.forEach((slot, index) => {
-        const slotAspectRatio = slot.width / slot.height;
-        const expectedRatio = selectedPreset.aspectRatio;
-        const match = Math.abs(slotAspectRatio - expectedRatio) < 0.01;
-        
-        console.log(`  Slot ${index + 1}:`, {
-          position: `${slot.x.toFixed(1)}%, ${slot.y.toFixed(1)}%`,
-          fixedSize: `${slot.width.toFixed(1)}% × ${slot.height.toFixed(1)}%`,
-          aspectRatio: slotAspectRatio.toFixed(3),
-          expected: expectedRatio.toFixed(3),
-          match: match ? '✅' : '❌'
-        });
-      });
-      
       const frameConfig: FrameConfig = {
         photo_count: selectedPhotoCount,
         layout: selectedPreset.layout,
@@ -217,19 +187,16 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
         default_slot_size: selectedPreset.defaultSlotSize,
       };
 
-      // Only save position data (x, y) - width/height will be calculated dynamically
       const photoSlotsForSave = photoSlots.map(slot => ({
         id: slot.id,
         x: slot.x,
         y: slot.y,
-        // Include width and height for now to maintain compatibility
-        // but these are FIXED based on photo_count
         width: slot.width,
         height: slot.height,
       }));
 
       await onUpload({
-        name:  frameName,
+        name: frameName,
         imageFile: selectedFile,
         photoSlots: photoSlotsForSave,
         frameConfig,
@@ -239,7 +206,7 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
       handleClose();
     } catch (error) {
       console.error('Error uploading frame:', error);
-      toast.error(error instanceof Error ? error.message :  'Failed to upload frame');
+      toast.error(error instanceof Error ? error.message : 'Failed to upload frame');
     } finally {
       setLoading(false);
     }
@@ -256,26 +223,22 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
     onClose();
   };
 
-  // Drag Handler - Position change ONLY (no resize)
   const handleMouseDown = (slotId: number, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setDragging(slotId);
-    setDragStart({ x:  e.clientX, y: e.clientY });
+    setDragStart({ x: e.clientX, y: e.clientY });
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!containerRef.current || dragging === null) return;
 
     const container = containerRef.current.getBoundingClientRect();
-    
-    // Validate container dimensions to prevent division by zero
     if (container.width === 0 || container.height === 0) return;
     
     const deltaX = ((e.clientX - dragStart.x) / container.width) * 100;
     const deltaY = ((e.clientY - dragStart.y) / container.height) * 100;
 
-    // Dragging (position change only) - size remains FIXED
     setPhotoSlots(prev =>
       prev.map(slot =>
         slot.id === dragging
@@ -298,16 +261,13 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-auto">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b">
           <h2 className="text-2xl font-bold text-gray-900">
             {step === 'upload' ? 'Upload New Frame' : 'Position Photo Slots'}
           </h2>
-          <button
-            onClick={handleClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
+          <button onClick={handleClose} className="text-gray-400 hover:text-gray-600">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -317,139 +277,100 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
         {/* Content */}
         <div className="p-6">
           {step === 'upload' ? (
-            // STEP 1:  Upload Frame
+            // STEP 1: Upload Frame
             <div className="space-y-6">
-              {/* Frame Name */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Frame Name
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Frame Name</label>
                 <input
                   type="text"
                   value={frameName}
                   onChange={(e) => setFrameName(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter frame name"
                 />
               </div>
 
-              {/* Photo Count Selection - NEW! */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Photo Layout
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Photo Layout</label>
                 <select
                   value={selectedPhotoCount}
                   onChange={(e) => handlePhotoCountChange(Number(e.target.value) as 1 | 2 | 3 | 4)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
                 >
                   {Object.values(FRAME_PRESETS).map((preset) => (
                     <option key={preset.photoCount} value={preset.photoCount}>
-                      {preset.name} - {preset.description} (Aspect Ratio: {preset.aspectRatio.toFixed(2)})
+                      {preset.name} (Ratio: {preset.aspectRatio.toFixed(2)})
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  Selected: <strong>{selectedPreset.name}</strong> - 
-                  Aspect ratio <strong>{selectedPreset.aspectRatio.toFixed(3)}</strong> 
-                  ({selectedPreset.aspectRatio > 1 ? 'Landscape' : 'Portrait'})
-                </p>
               </div>
 
-              {/* Frame Image Upload */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Frame Image
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Frame Image</label>
                 <div
-                  onClick={() => fileInputRef.current?. click()}
-                  className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 transition-colors"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500"
                 >
                   {previewUrl ? (
                     <div className="flex flex-col items-center">
-                      <img
-                        src={previewUrl}
-                        alt="Frame preview"
-                        className="max-h-64 object-contain mb-4"
-                      />
+                      <img src={previewUrl} alt="Preview" className="max-h-64 object-contain mb-4" />
                       <p className="text-sm text-gray-600">Click to change image</p>
                     </div>
                   ) : (
-                    <div>
-                      <svg
-                        className="mx-auto h-12 w-12 text-gray-400"
-                        stroke="currentColor"
-                        fill="none"
-                        viewBox="0 0 48 48"
-                      >
-                        <path
-                          d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h. 02"
-                          strokeWidth={2}
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                      <p className="mt-2 text-sm text-gray-600">
-                        Click to upload or drag and drop
-                      </p>
-                      <p className="text-xs text-gray-500">PNG, JPG up to 10MB</p>
-                    </div>
+                    <p className="text-gray-500">Click to upload frame image</p>
                   )}
                 </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
+                <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
               </div>
             </div>
           ) : (
-            // STEP 2: Position Photo Slots
-            <div className="space-y-4">
-              {/* Instructions with Preset Info */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="mb-2">
-                  <p className="text-sm font-semibold text-blue-900">
-                    Selected Preset: {selectedPreset.name}
-                  </p>
-                  <p className="text-xs text-blue-700">
-                    Aspect Ratio: <strong>{selectedPreset.aspectRatio.toFixed(3)}</strong> (4:3 Landscape) - 
-                    {' '}{selectedPhotoCount} photo{selectedPhotoCount > 1 ? 's' : ''}
-                  </p>
-                </div>
-                <p className="text-sm text-blue-800">
-                  <strong>Instructions:</strong> Drag the boxes to position them. 
-                  <strong> Slot sizes are FIXED at 4:3 aspect ratio</strong> - only position can be adjusted.
-                </p>
+            // STEP 2: Position Photo Slots (THE FIX IS HERE)
+            <div className="flex flex-col items-center space-y-4">
+              <div className="w-full bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+                <strong>Current Layout:</strong> {selectedPreset.name} <br />
+                <strong>Container Ratio:</strong> {selectedPreset.aspectRatio.toFixed(3)}
               </div>
 
-              {/* Frame with Draggable Slots */}
-              <div
-                ref={containerRef}
-                className="relative bg-gray-100 rounded-lg overflow-hidden mx-auto"
-                style={{ maxWidth: '600px', aspectRatio: '2/3' }}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
-              >
-                {/* Frame Image */}
-                {previewUrl && (
-                  <img
-                    src={previewUrl}
-                    alt="Frame"
-                    className="absolute inset-0 w-full h-full object-contain pointer-events-none"
-                  />
-                )}
+              {/* PERBAIKAN UTAMA:
+                  Container ini sekarang memaksa aspect-ratio mengikuti preset.
+                  Jadi untuk strip 4 foto (0.27), kotak abu-abu ini akan jadi kurus panjang.
+              */}
+              <div className="w-full flex justify-center bg-gray-200 p-4 rounded-xl overflow-hidden">
+                <div
+                  ref={containerRef}
+                  className="relative bg-white shadow-xl mx-auto"
+                  style={{
+                    // 1. Paksa Aspect Ratio sesuai kertas fisik
+                    aspectRatio: `${selectedPreset.aspectRatio}`,
+                    
+                    // 2. Logic Responsif: 
+                    // Jika Strip (Ratio < 1), kunci tinggi (height), lebar auto.
+                    // Jika Landscape (Ratio > 1), kunci lebar (width), tinggi auto.
+                    height: selectedPreset.aspectRatio < 1 ? '70vh' : 'auto',
+                    width: selectedPreset.aspectRatio > 1 ? '100%' : 'auto',
+                    
+                    // Batasan agar tidak keluar layar
+                    maxHeight: '75vh',
+                    maxWidth: '100%'
+                  }}
+                  onMouseMove={handleMouseMove}
+                  onMouseUp={handleMouseUp}
+                  onMouseLeave={handleMouseUp}
+                >
+                  {/* Background Frame Image */}
+                  {previewUrl && (
+                    <img
+                      src={previewUrl}
+                      alt="Frame"
+                      className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                    />
+                  )}
 
-                {/* Draggable Photo Slots - FIXED SIZE (no resize) */}
-                {photoSlots.map((slot) => {
-                  const slotAspectRatio = slot.width / slot.height;
-                  return (
+                  {/* Slots */}
+                  {photoSlots.map((slot) => (
                     <div
                       key={slot.id}
-                      className="absolute border-4 border-green-500 bg-green-500/20 cursor-move"
+                      className="absolute border-2 border-green-400 bg-green-400/30 hover:bg-green-400/40 cursor-move z-10"
                       style={{
                         left: `${slot.x}%`,
                         top: `${slot.y}%`,
@@ -458,34 +379,12 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
                       }}
                       onMouseDown={(e) => handleMouseDown(slot.id, e)}
                     >
-                      {/* Slot Label with FIXED Aspect Ratio */}
-                      <div className="absolute top-1 left-1 bg-green-600 text-white text-xs px-2 py-1 rounded font-semibold">
-                        Photo {slot.id} | Ratio: 1.33 (FIXED)
+                      <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white drop-shadow-md pointer-events-none">
+                        {slot.id}
                       </div>
-
-                      {/* ❌ NO RESIZE HANDLE - Size is FIXED */}
                     </div>
-                  );
-                })}
-              </div>
-
-              {/* Slot Info with Aspect Ratio */}
-              <div className={`grid gap-4 text-xs ${selectedPhotoCount === 4 ? 'grid-cols-4' : selectedPhotoCount === 3 ? 'grid-cols-3' : selectedPhotoCount === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                {photoSlots.map((slot) => {
-                  const slotAspectRatio = slot.width / slot.height;
-                  return (
-                    <div key={slot.id} className="bg-gray-100 p-3 rounded-lg">
-                      <p className="font-semibold mb-1">Photo {slot.id}</p>
-                      <p>X: {slot.x.toFixed(1)}%</p>
-                      <p>Y: {slot.y.toFixed(1)}%</p>
-                      <p>W: {slot.width.toFixed(1)}%</p>
-                      <p>H: {slot.height.toFixed(1)}%</p>
-                      <p className="font-semibold text-green-600 mt-1">
-                        Ratio: {slotAspectRatio.toFixed(3)}
-                      </p>
-                    </div>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -495,30 +394,13 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
         <div className="flex items-center justify-between p-6 border-t bg-gray-50">
           {step === 'upload' ? (
             <>
-              <Button variant="secondary" onClick={handleClose}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleNext}
-                disabled={!frameName.trim() || !selectedFile}
-              >
-                Next:  Position Slots →
-              </Button>
+              <Button variant="secondary" onClick={handleClose}>Cancel</Button>
+              <Button variant="primary" onClick={handleNext} disabled={!frameName.trim() || !selectedFile}>Next →</Button>
             </>
           ) : (
             <>
-              <Button variant="secondary" onClick={handleBack}>
-                ← Back
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleSaveFrame}
-                loading={loading}
-                disabled={loading}
-              >
-                Save Frame
-              </Button>
+              <Button variant="secondary" onClick={handleBack}>← Back</Button>
+              <Button variant="primary" onClick={handleSaveFrame} loading={loading} disabled={loading}>Save Frame</Button>
             </>
           )}
         </div>
