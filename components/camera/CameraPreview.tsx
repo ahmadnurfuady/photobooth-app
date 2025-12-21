@@ -36,56 +36,51 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [frameDimensions, setFrameDimensions] = useState<{ width: number; height: number } | null>(null);
+  
+  // State dimensi container untuk kalkulasi capture
+  const [containerDims, setContainerDims] = useState({ width: 640, height: 480 });
 
-  // 1. KONFIGURASI KAMERA
-  const CAMERA_CONTAINER = {
-    width: 640,
-    height: 480,
-  };
+  // 1. RESPONSIVE LISTENER
+  useEffect(() => {
+    const updateDimensions = () => {
+      if (cameraContainerRef.current) {
+        setContainerDims({
+          width: cameraContainerRef.current.offsetWidth,
+          height: cameraContainerRef.current.offsetHeight
+        });
+      }
+    };
+    updateDimensions();
+    window.addEventListener('resize', updateDimensions);
+    return () => window.removeEventListener('resize', updateDimensions);
+  }, []);
 
-  // Target ukuran box di layar (bisa diperbesar/diperkecil)
-  const TARGET_BOX_SIZE = 450;
-
-  // 2. LOAD DIMENSI FRAME
+  // 2. LOAD FRAME
   useEffect(() => {
     const img = new Image();
     img.onload = () => {
       setFrameDimensions({ width: img.width, height: img.height });
-      console.log('🖼️ Frame dimensions loaded:', img.width, '×', img.height);
     };
     img.src = frame.cloudinary_url;
   }, [frame.cloudinary_url]);
 
-  // ✅ PERBAIKAN: Hitung Jumlah Foto Real (Agar tombol Next/Finish akurat)
   const actualTotalPhotos = useMemo(() => {
-    if (frame.frame_config?.photo_count) {
-      return frame.frame_config.photo_count;
-    }
-    if (frame.photo_slots && frame.photo_slots.length > 0) {
-      return frame.photo_slots.length;
-    }
+    if (frame.frame_config?.photo_count) return frame.frame_config.photo_count;
+    if (frame.photo_slots && frame.photo_slots.length > 0) return frame.photo_slots.length;
     return totalPhotos || 3;
   }, [frame, totalPhotos]);
 
-  // ✅ PERBAIKAN: Hitung Aspect Ratio Frame (Agar preview kanan tidak gepeng)
   const frameAspectRatio = useMemo(() => {
-    if (frame.frame_config?.aspect_ratio) {
-      return frame.frame_config.aspect_ratio;
-    }
-    if (frameDimensions && frameDimensions.height > 0) {
-      return frameDimensions.width / frameDimensions.height;
-    }
-    return 2 / 3; // Default fallback
+    if (frame.frame_config?.aspect_ratio) return frame.frame_config.aspect_ratio;
+    if (frameDimensions && frameDimensions.height > 0) return frameDimensions.width / frameDimensions.height;
+    return 2 / 3;
   }, [frame, frameDimensions]);
 
-  // 3. LOGIKA SLOT FOTO (Menentukan posisi slot saat ini)
+  // 3. LOGIKA POSISI SLOT
   const currentSlot = useMemo((): PhotoSlot | null => {
-    // Priority 1: Use photo_slots from DB
     if (frame.photo_slots && frame.photo_slots.length > 0) {
       return frame.photo_slots[photoNumber - 1] || null;
     }
-    
-    // Priority 2: Generate based on config
     if (frame.frame_config) {
       const { photo_count } = frame.frame_config;
       const slotSizeConfig = FIXED_SLOT_SIZES[photo_count as keyof typeof FIXED_SLOT_SIZES] || FIXED_SLOT_SIZES[3];
@@ -93,7 +88,6 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
       const slotHeight = slotSizeConfig.height;
       const gap = 5;
       const defaultSlots: PhotoSlot[] = [];
-      
       for (let i = 0; i < photo_count; i++) {
         defaultSlots.push({
           id: i + 1,
@@ -105,42 +99,27 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
       }
       return defaultSlots[photoNumber - 1] || null;
     }
-    
-    // Priority 3: Ultimate fallback
-    const defaultSlots: PhotoSlot[] = [
-      { id: 1, x: 20, y: 10, width: 60, height: 45 },
-      { id: 2, x: 20, y: 40, width: 60, height: 45 },
-      { id: 3, x: 20, y: 70, width: 60, height: 45 },
-    ];
-    return defaultSlots[photoNumber - 1] || null;
-  }, [frame.photo_slots, frame.frame_config, photoNumber]);
+    return null;
+  }, [frame, photoNumber]);
 
   // 4. LOGIKA BOUNDING BOX (KOTAK HIJAU)
   const boundingBox = useMemo(() => {
     if (!currentSlot || !frameDimensions) {
-      return { 
-        width: 400, 
-        height: 300, 
-        left: '50%',
-        top: '50%',
-        transform: 'translate(-50%, -50%)',
-        aspectRatio: 4/3,
-      };
+      return { width: 300, height: 225, left: '50%', top: '50%', transform: 'translate(-50%, -50%)', aspectRatio: 4/3 };
     }
-
-    // ✅ FORCE 4:3 LANDSCAPE UNTUK SEMUA FOTO
     const FORCE_ASPECT_RATIO = 4 / 3;
     const slotAspectRatio = FORCE_ASPECT_RATIO;
+    
+    // Ukuran dinamis (75% dari container)
+    const targetBoxSize = containerDims.width * 0.75; 
 
-    let boxWidth: number;
-    let boxHeight: number;
-
+    let boxWidth, boxHeight;
     if (slotAspectRatio > 1) {
-      boxWidth = TARGET_BOX_SIZE;
-      boxHeight = TARGET_BOX_SIZE / slotAspectRatio;
+      boxWidth = targetBoxSize;
+      boxHeight = targetBoxSize / slotAspectRatio;
     } else {
-      boxHeight = TARGET_BOX_SIZE;
-      boxWidth = TARGET_BOX_SIZE * slotAspectRatio;
+      boxHeight = targetBoxSize;
+      boxWidth = targetBoxSize * slotAspectRatio;
     }
 
     return {
@@ -151,16 +130,14 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
       top: '50%',
       transform: 'translate(-50%, -50%)',
     };
-  }, [currentSlot, frameDimensions]);
+  }, [currentSlot, frameDimensions, containerDims.width]);
 
-  // 5. TIMER COUNTDOWN
+  // 5. COUNTDOWN
   const startCountdown = useCallback(() => {
     if (isCapturing || currentCapturedPhoto) return;
-    
     setIsCapturing(true);
     let count = 3;
     setCountdown(count);
-
     const interval = setInterval(() => {
       count--;
       if (count > 0) {
@@ -173,7 +150,7 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
     }, 1000);
   }, [isCapturing, currentCapturedPhoto]);
 
-  // ✅ 6. FUNGSI CAPTURE PHOTO (PERBAIKAN UTAMA: ANTI GEPENG)
+  // 6. FUNGSI CAPTURE (SMART OFFSET FIX)
   const capturePhoto = useCallback(() => {
     if (!webcamRef.current || !cameraContainerRef.current || !currentSlot) return;
 
@@ -181,226 +158,204 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
       const fullImage = webcamRef.current.getScreenshot();
       if (!fullImage) return;
 
-      const containerWidth = CAMERA_CONTAINER.width;
-      const containerHeight = CAMERA_CONTAINER.height;
-      
-      // Hitung area crop (Green Box)
-      const boxCenterX = containerWidth / 2;
-      const boxCenterY = containerHeight / 2;
-      const cropX = boxCenterX - (boundingBox.width / 2);
-      const cropY = boxCenterY - (boundingBox.height / 2);
-      const cropWidth = boundingBox.width;
-      const cropHeight = boundingBox.height;
+      const contW = containerDims.width;
+      const contH = containerDims.height;
+      const boxW = boundingBox.width;
+      const boxH = boundingBox.height;
+      const boxLeft = (contW - boxW) / 2;
+      const boxTop = (contH - boxH) / 2;
 
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      // Gunakan rasio visual box agar hasil foto sama persis dengan yang dilihat user
-      const captureAspectRatio = boundingBox.width / boundingBox.height;
-      
-      // Resolusi Output Tinggi
-      const CAPTURE_WIDTH = 1200; 
-      const CAPTURE_HEIGHT = Math.round(CAPTURE_WIDTH / captureAspectRatio);
-      
-      canvas.width = CAPTURE_WIDTH;
-      canvas.height = CAPTURE_HEIGHT;
-
-      console.log('📸 Capture Debug:');
-      console.log(' - Visual Box:', boundingBox.width.toFixed(0), 'x', boundingBox.height.toFixed(0));
-      console.log(' - Output Canvas:', CAPTURE_WIDTH, 'x', CAPTURE_HEIGHT);
+      const captureRatio = boxW / boxH;
+      canvas.width = 1200; 
+      canvas.height = Math.round(canvas.width / captureRatio);
 
       const img = new Image();
       img.onload = () => {
-        const scaleX = img.width / containerWidth;
-        const scaleY = img.height / containerHeight;
+        const imgW = img.width;
+        const imgH = img.height;
+        const imgRatio = imgW / imgH;
+        const contRatio = contW / contH;
 
-        // Draw Image: Crop dari Webcam -> Paste ke Canvas Full
-        // Karena rasionya sama, gambar TIDAK akan ketarik.
+        let renderW, renderH, offsetX, offsetY;
+
+        if (contRatio > imgRatio) {
+          renderW = contW;
+          renderH = contW / imgRatio;
+          offsetX = 0;
+          offsetY = (renderH - contH) / 2;
+        } else {
+          renderH = contH;
+          renderW = contH * imgRatio;
+          offsetX = (renderW - contW) / 2;
+          offsetY = 0;
+        }
+
+        const scale = imgW / renderW;
+        const sourceX = (offsetX + boxLeft) * scale;
+        const sourceY = (offsetY + boxTop) * scale;
+        const sourceW = boxW * scale;
+        const sourceH = boxH * scale;
+
         ctx.drawImage(
           img,
-          cropX * scaleX,      // Source X
-          cropY * scaleY,      // Source Y
-          cropWidth * scaleX,  // Source Width
-          cropHeight * scaleY, // Source Height
-          0,                   // Dest X
-          0,                   // Dest Y
-          canvas.width,        // Dest Width
-          canvas.height        // Dest Height
+          sourceX, sourceY, sourceW, sourceH,
+          0, 0, canvas.width, canvas.height
         );
-
-        const croppedImage = canvas.toDataURL('image/jpeg', 0.95);
-        onCapture(croppedImage);
+        onCapture(canvas.toDataURL('image/jpeg', 0.95));
       };
-
       img.src = fullImage;
     } catch (error) {
       console.error('Error capturing photo:', error);
     } finally {
       setIsCapturing(false);
     }
-  }, [onCapture, currentSlot, boundingBox]);
+  }, [onCapture, currentSlot, boundingBox, containerDims]);
 
-  // 7. RENDER UI
+  // 7. RENDER UI (PREMIUM THEME MATCHING LANDING PAGE)
   return (
-    <div className="h-screen w-screen bg-gradient-to-br from-gray-900 to-gray-800 flex gap-6 p-6">
+    <div className="h-screen w-screen bg-slate-950 flex flex-col lg:flex-row gap-4 p-4 lg:p-6 overflow-hidden relative font-sans text-slate-100">
+      
+      {/* --- BACKGROUND GLOW EFFECTS (Konsisten dengan Landing Page) --- */}
+      <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-purple-600/10 rounded-full blur-[120px] pointer-events-none" />
+
       {/* --- BAGIAN KIRI: CAMERA PREVIEW --- */}
-      <div className="flex-1 flex flex-col items-center justify-center relative">
-        {/* Header Camera */}
-        <div className="absolute top-0 left-0 right-0 z-10 mb-4">
-          <div className="flex items-center justify-between text-white">
-            <div>
-              <h2 className="text-2xl font-bold">
-                Photo {photoNumber} / {actualTotalPhotos}
-              </h2>
-              <p className="text-sm text-gray-300 mt-0.5">Frame: {frame.name}</p>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setMirrored(!mirrored)}
-              className="text-white hover:bg-white/20"
-            >
-              <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-              </svg>
-              {mirrored ? 'Mirrored' : 'Normal'}
-            </Button>
+      <div className="flex-1 flex flex-col items-center justify-center relative min-h-0 z-10">
+        
+        {/* HEADER */}
+        <div className="w-full max-w-2xl flex items-center justify-between text-slate-100 mb-2 shrink-0">
+          <div>
+            <h2 className="text-lg lg:text-xl font-bold tracking-tight">
+              Photo {photoNumber} / {actualTotalPhotos}
+            </h2>
+            <p className="text-xs text-slate-400">Frame: {frame.name}</p>
           </div>
+
+          <button
+            onClick={() => setMirrored(!mirrored)}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/50 border border-slate-700 hover:bg-slate-700/50 transition-all text-xs lg:text-sm font-medium backdrop-blur-md"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+            </svg>
+            {mirrored ? 'Mirrored' : 'Normal'}
+          </button>
         </div>
 
-        {/* Container Webcam */}
-        <div className="flex flex-col items-center">
-          <div 
-            ref={cameraContainerRef}
-            className="relative bg-black rounded-2xl overflow-hidden shadow-2xl border-4 border-gray-700" 
-            style={{ 
-              width: `${CAMERA_CONTAINER.width}px`, 
-              height: `${CAMERA_CONTAINER.height}px` 
-            }}
-          >
-            <div className="absolute inset-0">
-              <Webcam
-                ref={webcamRef}
-                audio={false}
-                screenshotFormat="image/jpeg"
-                videoConstraints={{
-                  facingMode: 'user',
-                  width: 1280,
-                  height: 720,
-                }}
-                mirrored={mirrored}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                }}
-              />
-            </div>
-
-            {/* Green Bounding Box Overlay */}
-            {currentSlot && !currentCapturedPhoto && (
-              <>
-                {/* Dark overlay with hole */}
-                <div className="absolute inset-0 pointer-events-none z-[9]">
-                  <div 
-                    className="absolute inset-0 bg-black/60" 
-                    style={{
-                      clipPath: `polygon(
-                        0 0, 100% 0, 100% 100%, 0 100%, 0 0,
-                        calc(50% - ${boundingBox.width / 2}px) calc(50% - ${boundingBox.height / 2}px),
-                        calc(50% - ${boundingBox.width / 2}px) calc(50% + ${boundingBox.height / 2}px),
-                        calc(50% + ${boundingBox.width / 2}px) calc(50% + ${boundingBox.height / 2}px),
-                        calc(50% + ${boundingBox.width / 2}px) calc(50% - ${boundingBox.height / 2}px),
-                        calc(50% - ${boundingBox.width / 2}px) calc(50% - ${boundingBox.height / 2}px)
-                      )`
-                    }}
-                  />
-                </div>
-
-                {/* Green Border */}
-                <div 
-                  className="absolute border-4 border-green-400 pointer-events-none z-10 transition-all duration-300 shadow-[0_0_20px_rgba(74,222,128,0.5)]"
-                  style={{
-                    width: `${boundingBox.width}px`,
-                    height: `${boundingBox.height}px`,
-                    left: boundingBox.left,
-                    top: boundingBox.top,
-                    transform: boundingBox.transform,
-                  }}
-                >
-                  <div className="absolute -top-2 -left-2 w-8 h-8 border-t-4 border-l-4 border-green-400 rounded-tl-lg" />
-                  <div className="absolute -top-2 -right-2 w-8 h-8 border-t-4 border-r-4 border-green-400 rounded-tr-lg" />
-                  <div className="absolute -bottom-2 -left-2 w-8 h-8 border-b-4 border-l-4 border-green-400 rounded-bl-lg" />
-                  <div className="absolute -bottom-2 -right-2 w-8 h-8 border-b-4 border-r-4 border-green-400 rounded-br-lg" />
-                  
-                  {/* Label Debug (Optional) */}
-                  <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-green-500/80 text-white px-3 py-1 rounded text-xs whitespace-nowrap">
-                    4:3 Photo
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* Countdown Overlay */}
-            {countdown !== null && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-20">
-                <div className="text-white text-9xl font-bold animate-pulse">
-                  {countdown}
-                </div>
-              </div>
-            )}
-
-            {/* Captured Indicator */}
-            {currentCapturedPhoto && (
-              <div className="absolute top-4 left-0 right-0 text-center z-20">
-                <span className="bg-green-500 text-white px-4 py-2 rounded-full font-semibold text-sm shadow-lg inline-flex items-center gap-2">
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                  Photo Captured!
-                </span>
-              </div>
-            )}
+        {/* CONTAINER WEBCAM RESPONSIVE */}
+        <div 
+          ref={cameraContainerRef}
+          className="relative w-full max-w-2xl aspect-[4/3] bg-black rounded-2xl overflow-hidden shadow-2xl shadow-blue-900/10 border-[3px] border-slate-800/50"
+        >
+          <div className="absolute inset-0">
+            <Webcam
+              ref={webcamRef}
+              audio={false}
+              screenshotFormat="image/jpeg"
+              videoConstraints={{ facingMode: 'user', width: 1280, height: 720 }}
+              mirrored={mirrored}
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
           </div>
 
-          {/* Tombol Shutter */}
+          {/* Green Bounding Box Overlay */}
+          {currentSlot && !currentCapturedPhoto && (
+            <>
+              {/* Overlay Gelap */}
+              <div className="absolute inset-0 pointer-events-none z-[9]">
+                <div 
+                  className="absolute inset-0 bg-black/60" 
+                  style={{
+                    clipPath: `polygon(
+                      0 0, 100% 0, 100% 100%, 0 100%, 0 0,
+                      calc(50% - ${boundingBox.width / 2}px) calc(50% - ${boundingBox.height / 2}px),
+                      calc(50% - ${boundingBox.width / 2}px) calc(50% + ${boundingBox.height / 2}px),
+                      calc(50% + ${boundingBox.width / 2}px) calc(50% + ${boundingBox.height / 2}px),
+                      calc(50% + ${boundingBox.width / 2}px) calc(50% - ${boundingBox.height / 2}px),
+                      calc(50% - ${boundingBox.width / 2}px) calc(50% - ${boundingBox.height / 2}px)
+                    )`
+                  }}
+                />
+              </div>
+
+              {/* Garis Hijau Neon */}
+              <div 
+                className="absolute border-4 border-green-500 pointer-events-none z-10 shadow-[0_0_30px_rgba(34,197,94,0.6)]"
+                style={{
+                  width: `${boundingBox.width}px`,
+                  height: `${boundingBox.height}px`,
+                  left: boundingBox.left,
+                  top: boundingBox.top,
+                  transform: boundingBox.transform,
+                }}
+              >
+                {/* Hiasan Sudut */}
+                <div className="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-green-400" />
+                <div className="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-green-400" />
+                <div className="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4 border-green-400" />
+                <div className="absolute -bottom-1 -right-1 w-6 h-6 border-b-4 border-r-4 border-green-400" />
+              </div>
+            </>
+          )}
+
+          {/* Countdown Overlay */}
+          {countdown !== null && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px] z-20">
+              <div className="text-white text-8xl lg:text-9xl font-extrabold animate-pulse drop-shadow-lg">{countdown}</div>
+            </div>
+          )}
+
+          {/* Captured Notification */}
+          {currentCapturedPhoto && (
+            <div className="absolute top-4 left-0 right-0 text-center z-20">
+              <span className="bg-green-500 text-white px-4 py-2 rounded-full font-bold text-sm shadow-lg shadow-green-500/30 inline-flex items-center gap-2">
+                Photo Captured!
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* CONTROL AREA */}
+        <div className="w-full flex flex-col items-center justify-center min-h-[100px] mt-2 shrink-0">
           {!currentCapturedPhoto && (
-            <div className="mt-6">
+            <div className="flex flex-col items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300">
               <Button
                 size="lg"
                 onClick={startCountdown}
                 disabled={isCapturing}
-                className="rounded-full w-20 h-20 p-0 bg-white hover:bg-gray-200 text-gray-900 shadow-2xl transition-transform hover:scale-105 active:scale-95"
+                className="rounded-full w-16 h-16 lg:w-20 lg:h-20 p-0 bg-white hover:bg-slate-200 text-slate-900 shadow-[0_0_40px_-10px_rgba(255,255,255,0.4)] transition-transform hover:scale-105 active:scale-95"
               >
                 {isCapturing ? (
-                  <div className="animate-spin w-8 h-8 border-4 border-gray-300 border-t-blue-600 rounded-full" />
+                  <div className="animate-spin w-8 h-8 lg:w-10 lg:h-10 border-4 border-slate-300 border-t-blue-600 rounded-full" />
                 ) : (
-                  <div className="w-16 h-16 rounded-full border-4 border-gray-300 flex items-center justify-center">
-                    <div className="w-12 h-12 bg-red-500 rounded-full" />
+                  <div className="w-12 h-12 lg:w-16 lg:h-16 rounded-full border-[4px] border-slate-300 flex items-center justify-center group-hover:border-slate-400">
+                    <div className="w-10 h-10 lg:w-12 lg:h-12 bg-red-500 rounded-full shadow-inner" />
                   </div>
                 )}
               </Button>
-              <p className="text-white text-center mt-2 text-sm font-medium opacity-80">
-                Position yourself in the green box
+              <p className="text-slate-200 text-center text-xs lg:text-sm font-medium bg-slate-900/50 px-4 py-1.5 rounded-full backdrop-blur-md border border-slate-800">
+                Position yourself inside the box
               </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* --- BAGIAN KANAN: FRAME PREVIEW --- */}
-      <div className="w-96 flex flex-col justify-center">
-        <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-2xl shadow-2xl p-6 h-[85vh] flex flex-col">
+      {/* --- BAGIAN KANAN: FRAME PREVIEW (GLASSMORPHISM CARD) --- */}
+      <div className="hidden lg:flex w-80 lg:w-96 flex-col justify-center shrink-0 z-10">
+        <div className="bg-slate-900/60 backdrop-blur-md rounded-3xl shadow-2xl p-6 h-[85vh] flex flex-col border border-slate-800/60">
           <div className="text-center mb-4 flex-shrink-0">
-            <h3 className="text-xl font-bold text-gray-900">Preview</h3>
-            <p className="text-sm text-gray-600">Your photos with frame</p>
+            <h3 className="text-lg font-bold text-white tracking-tight">Live Preview</h3>
+            <p className="text-xs text-slate-400">Your photos fit into the frame</p>
           </div>
 
-          {/* Container Frame Dinamis */}
-          <div className="flex-1 flex items-center justify-center overflow-hidden bg-gray-200/50 rounded-xl p-2">
+          <div className="flex-1 flex items-center justify-center overflow-hidden bg-slate-950/50 rounded-2xl p-4 border border-slate-800 inner-shadow">
             <div 
-              className="relative bg-white shadow-xl transition-all duration-300"
+              className="relative bg-white shadow-lg transition-all duration-300"
               style={{
                 aspectRatio: `${frameAspectRatio}`,
                 height: frameAspectRatio < 1 ? '100%' : 'auto',
@@ -409,12 +364,11 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
                 maxWidth: '100%'
               }}
             >
-              {/* Layer Foto */}
               <div className="absolute inset-0 overflow-hidden">
                 {frame.photo_slots?.map((slot, index) => (
                   <div
                     key={slot.id}
-                    className="absolute"
+                    className="absolute transition-all duration-500"
                     style={{
                       left: `${slot.x}%`,
                       top: `${slot.y}%`,
@@ -422,79 +376,40 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
                       height: `${slot.height}%`,
                     }}
                   >
-                    {capturedPhotos[index] ? (
+                    {capturedPhotos[index] && (
                       <img 
                         src={capturedPhotos[index]!} 
                         alt={`Photo ${index + 1}`} 
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover animate-in zoom-in duration-300"
                       />
-                    ) : (
-                      <div className="w-full h-full bg-gray-100 flex items-center justify-center border border-dashed border-gray-300">
-                        <span className="text-xs text-gray-400 font-medium">{index + 1}</span>
-                      </div>
                     )}
                   </div>
                 ))}
               </div>
-
-              {/* Layer Frame Image */}
-              <img
-                src={frame.cloudinary_url}
-                alt={frame.name}
-                className="relative w-full h-full object-cover pointer-events-none z-10"
-              />
+              <img src={frame.cloudinary_url} alt={frame.name} className="relative w-full h-full object-cover pointer-events-none z-10" />
             </div>
           </div>
 
-          {/* Tombol Aksi */}
-          <div className="mt-4 flex-shrink-0">
+          <div className="mt-6 flex-shrink-0">
             {currentCapturedPhoto && (
-              <div className="space-y-3">
-                <Button
-                  variant="secondary"
-                  size="md"
-                  onClick={onRetake}
-                  className="w-full"
-                >
-                  Retake
+              <div className="space-y-3 animate-in slide-in-from-bottom-2">
+                <Button variant="secondary" onClick={onRetake} className="w-full border border-slate-700 bg-slate-800 hover:bg-slate-700 text-white shadow-sm">
+                  Retake Photo
                 </Button>
-                
-                {/* Logic Tombol Next / Finish */}
                 {photoNumber < actualTotalPhotos ? (
-                  <Button
-                    variant="primary"
-                    size="md"
-                    onClick={onNext}
-                    className="w-full"
-                  >
+                  <Button variant="primary" onClick={onNext} className="w-full shadow-lg shadow-blue-900/20 bg-blue-600 hover:bg-blue-700 text-white">
                     Next Photo
                   </Button>
                 ) : (
-                  <Button
-                    variant="primary"
-                    size="md"
-                    onClick={onFinish}
-                    className="w-full bg-green-600 hover:bg-green-700"
-                  >
-                    Finish
+                  <Button variant="primary" onClick={onFinish} className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white shadow-lg shadow-green-900/20">
+                    Finish Session
                   </Button>
                 )}
               </div>
             )}
-
-            {/* Progress Dots */}
-            <div className="mt-4 flex justify-center gap-2">
+            <div className="mt-6 flex justify-center gap-2">
               {Array.from({ length: actualTotalPhotos }).map((_, index) => (
-                <div
-                  key={index}
-                  className={`h-2 rounded-full transition-all ${
-                    capturedPhotos[index]
-                      ? 'w-8 bg-green-500'
-                      : index === photoNumber - 1
-                      ? 'w-8 bg-blue-500'
-                      : 'w-4 bg-gray-300'
-                  }`}
-                />
+                <div key={index} className={`h-1.5 rounded-full transition-all duration-300 ${capturedPhotos[index] ? 'w-8 bg-green-500' : index === photoNumber - 1 ? 'w-8 bg-blue-500' : 'w-1.5 bg-slate-700'}`} />
               ))}
             </div>
           </div>

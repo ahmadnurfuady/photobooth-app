@@ -4,7 +4,6 @@ import { sessionQueries } from '@/lib/supabase';
 import { uploadToCloudinary } from '@/lib/cloudinary';
 import { v4 as uuidv4 } from 'uuid';
 
-// POST /api/sessions - Create new photo session
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -15,10 +14,17 @@ export async function POST(request: NextRequest) {
       gif, // GIF animation
     } = body;
 
-    // Validation
+    // 1. Validation
+    // Backend mewajibkan semua data ini ada.
     if (!frame_id || !photos || !composite_photo || !gif) {
+      console.error("❌ [API] Missing Fields:", { 
+        hasFrame: !!frame_id, 
+        photosLen: photos?.length, 
+        hasComposite: !!composite_photo, 
+        hasGif: !!gif 
+      });
       return NextResponse.json(
-        { success: false, error: 'Missing required fields' },
+        { success: false, error: 'Missing required fields (photos, composite, or gif)' },
         { status: 400 }
       );
     }
@@ -26,7 +32,9 @@ export async function POST(request: NextRequest) {
     const sessionId = uuidv4();
     const timestamp = Date.now();
 
-    // Upload individual photos to Cloudinary
+    console.log(`🚀 Starting processing for session: ${sessionId}`);
+
+    // 2. Upload individual photos to Cloudinary
     let uploadedPhotos = [];
     try {
       uploadedPhotos = await Promise.all(
@@ -50,7 +58,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Upload composite photo (strip with frames)
+    // 3. Upload composite photo
     let compositeResult;
     try {
       compositeResult = await uploadToCloudinary(composite_photo, {
@@ -65,26 +73,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Upload GIF
+    // 4. Upload GIF
     let gifResult;
     try {
-      // Validate GIF data
-      if (!gif || typeof gif !== 'string') {
-        throw new Error('Invalid GIF data: must be a base64 string');
-      }
       if (!gif.startsWith('data:image/gif')) {
-        throw new Error('Invalid GIF format: must be a data URI with image/gif MIME type');
+         // Fallback ringan jika header salah, tapi sebaiknya validasi di frontend
+         console.warn("Warning: GIF data header mismatch");
       }
-      
-      console.log('Uploading GIF, size:', gif.length, 'bytes');
       
       gifResult = await uploadToCloudinary(gif, {
         folder: `photobooth/sessions/${sessionId}`,
         public_id: `animation_${timestamp}`,
-        resource_type: 'image',
+        resource_type: 'image', // Cloudinary auto-detects GIFs as images usually
       });
-      
-      console.log('GIF uploaded successfully:', gifResult.secure_url);
     } catch (uploadError: any) {
       console.error('Failed to upload GIF:', uploadError);
       return NextResponse.json(
@@ -93,24 +94,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Save session to Supabase
+    // 5. Save session to Supabase
+    // Pastikan sessionQueries.create sesuai dengan tabel Anda
     const { data, error } = await sessionQueries.create({
       frame_id,
-      photos: uploadedPhotos,
+      photos: uploadedPhotos, // Simpan array JSON URL foto
       composite_url: compositeResult.secure_url,
       composite_public_id: compositeResult.public_id,
       gif_url: gifResult.secure_url,
       gif_public_id: gifResult.public_id,
       photo_count: photos.length,
-      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       files_deleted: false,
       deleted_at: null,
     });
 
     if (error) {
-      console.error('Supabase error:', error);
+      // LOGGING PENTING: Menampilkan detail error Supabase (misal: RLS policy violation)
+      console.error('❌ Supabase DB Error:', JSON.stringify(error, null, 2));
       return NextResponse.json(
-        { success: false, error: 'Failed to save session to database' },
+        { success: false, error: 'Failed to save session to database', details: error },
         { status: 500 }
       );
     }
@@ -118,18 +121,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        session_id: data.id,
+        session_id: data?.id, // Handle if data is null (though insert returns data)
         ...data,
       },
       message: 'Session created successfully',
     });
+
   } catch (error: any) {
-    console.error('Error creating session:', error);
+    console.error('❌ General Server Error:', error);
     return NextResponse.json(
       { success: false, error: error.message || 'Internal server error' },
       { status: 500 }
     );
   }
 }
-
-// GET /api/sessions/[id] - Will be in separate file
