@@ -10,7 +10,6 @@ import toast from 'react-hot-toast';
 import Image from 'next/image';
 
 // Import library pemrosesan gambar Anda
-// (Fungsi ini akan dijalankan, jika gagal akan masuk ke fallback)
 import {
   createPhotoStripWithFrame,
   generateGIF,
@@ -18,58 +17,42 @@ import {
 } from '@/lib/imageProcessing';
 
 // Helper: Generate ID unik di client (untuk QR Code instan)
-// app/result/page.tsx
-
-// ... imports tetap sama ...
-
-// ✅ PERBAIKAN: Generator UUID v4 Asli (Native Browser)
-// Ini menghasilkan format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
-// yang diterima oleh kolom UUID di Supabase.
 const generateSessionId = () => {
-  // Cara 1: Gunakan API modern browser (paling cepat & aman)
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID();
   }
   
-  // Cara 2: Fallback manual untuk browser lama (UUID v4 compatible)
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
     return v.toString(16);
   });
 };
 
-
 export default function ResultPage() {
   const router = useRouter();
   
   // --- STATE UI ---
-  // Status proses: 'initializing' -> 'processing' -> 'uploading' -> 'complete' | 'error'
   const [status, setStatus] = useState<'initializing' | 'processing' | 'uploading' | 'complete' | 'error'>('initializing');
   const [progressMessage, setProgressMessage] = useState('Initializing...');
 
   // --- STATE DATA ---
-  const [sessionId, setSessionId] = useState<string>(''); // ID sesi (dibuat di awal)
-  const [downloadUrl, setDownloadUrl] = useState<string>(''); // URL download (dibuat di awal)
+  const [sessionId, setSessionId] = useState<string>(''); 
+  const [downloadUrl, setDownloadUrl] = useState<string>(''); 
   const [selectedFrame, setSelectedFrame] = useState<Frame | null>(null);
   const [capturedPhotos, setCapturedPhotos] = useState<string[]>([]);
   
-  // Hasil Generate (Awalnya null, akan terisi setelah proses selesai)
   const [compositePhoto, setCompositePhoto] = useState<string | null>(null);
   const [gifUrl, setGifUrl] = useState<string | null>(null);
   const [session, setSession] = useState<PhotoSession | null>(null);
 
   // 1. INIT ON MOUNT: Generate ID & Tampilkan Halaman LANGSUNG
   useEffect(() => {
-    // A. Generate ID Unik detik ini juga
     const newId = generateSessionId();
     setSessionId(newId);
     
-    // B. Buat URL Download (Deterministic URL)
-    // URL ini bisa dibuka user meskipun data belum masuk database (Logic "Waiting Room")
     const appUrl = typeof window !== 'undefined' ? window.location.origin : '';
     setDownloadUrl(`${appUrl}/download/${newId}`);
 
-    // C. Load Data & Mulai Background Process
     loadAndStartBackgroundProcess(newId);
   }, []);
 
@@ -90,11 +73,9 @@ export default function ResultPage() {
       setSelectedFrame(frame);
       setCapturedPhotos(photos);
       
-      // Update status: UI tampil, sekarang mulai proses berat di background
       setStatus('processing');
       setProgressMessage('Designing your photo strip... 🎨');
       
-      // --- MULAI PARALLEL PROCESSING ---
       await processAllPhotos(frame, photos, currentSessionId);
 
     } catch (error) {
@@ -106,11 +87,9 @@ export default function ResultPage() {
 
   const processAllPhotos = async (frame: Frame, photos: string[], currentSessionId: string) => {
     try {
-      // --- STEP 1: COMPOSITE PHOTO (Local Processing) ---
-      // User sudah bisa lihat QR Code, tapi Preview gambar masih loading
+      // --- STEP 1: COMPOSITE PHOTO ---
       let finalComposite: string | null = null;
       try {
-        // Coba pakai library utama Anda
         finalComposite = await createPhotoStripWithFrame(
           photos,
           frame.cloudinary_url,
@@ -119,36 +98,33 @@ export default function ResultPage() {
         );
       } catch (libError) {
         console.warn("Library composite failed, using fallback...", libError);
-        // Fallback: Generate manual pakai Canvas (agar tidak crash)
         finalComposite = await generateCompositeFallback(photos, frame);
       }
       
       if (!finalComposite) throw new Error("Failed to generate photo strip");
-      setCompositePhoto(finalComposite); // Preview Strip Muncul!
+      setCompositePhoto(finalComposite);
 
-      // --- STEP 2: GIF ANIMATION (Local Processing) ---
+      // --- STEP 2: GIF ANIMATION ---
       setProgressMessage('Creating animation... ✨');
       let finalGif: string | null = null;
       try {
-        // Coba pakai library generateGIF utama
         finalGif = await generateGIF(photos);
       } catch (gifError) {
         console.warn("GIF generation failed, using static fallback...", gifError);
-        // Fallback dummy GIF (1x1 pixel transparan) agar backend tidak reject
         finalGif = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
       }
       setGifUrl(finalGif);
 
-      // --- STEP 3: UPLOAD TO SERVER (Background Upload) ---
+      // --- STEP 3: UPLOAD TO SERVER ---
       setStatus('uploading');
       setProgressMessage('Syncing to cloud... ☁️');
       
       const payload = {
-        id: currentSessionId, // ✅ KIRIM ID YANG SUDAH KITA GENERATE (PENTING!)
+        id: currentSessionId,
         frame_id: frame.id,
-        photos: photos,            // Array Foto Original
-        composite_photo: finalComposite, // Strip Foto yang sudah jadi
-        gif: finalGif || "",      // GIF Animation
+        photos: photos,
+        composite_photo: finalComposite,
+        gif: finalGif || "",
       };
 
       const response = await fetch('/api/sessions', {
@@ -166,25 +142,21 @@ export default function ResultPage() {
       setSession(responseData.data);
 
       // --- STEP 4: FINISH ---
-      setStatus('complete'); // Indikator di bawah QR berubah jadi hijau
+      setStatus('complete');
       setProgressMessage('Ready!');
       toast.success('Upload complete! Your photos are safe.');
       
-      // Bersihkan Storage agar sesi baru bersih
       sessionStorage.removeItem('selectedFrame');
       sessionStorage.removeItem('capturedPhotos');
 
     } catch (error: any) {
       console.error('Processing Error:', error);
       toast.error(`Upload failed: ${error.message}`);
-      // Tetap biarkan user download manual lewat tombol jika upload gagal
       setStatus('error');
       setProgressMessage('Upload failed (Saved Locally)');
     }
   };
 
-  // --- FALLBACK FUNCTION: Manual Canvas Composite ---
-  // Digunakan HANYA JIKA createPhotoStripWithFrame dari library gagal/error
   const generateCompositeFallback = async (photos: string[], frame: Frame): Promise<string> => {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement('canvas');
@@ -192,11 +164,10 @@ export default function ResultPage() {
       if (!ctx) { reject('No canvas context'); return; }
 
       const WIDTH = 600;
-      const HEIGHT = 1200; // Ukuran strip standar
+      const HEIGHT = 1200;
       canvas.width = WIDTH;
       canvas.height = HEIGHT;
 
-      // Background Putih
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
@@ -205,20 +176,16 @@ export default function ResultPage() {
       frameImg.src = frame.cloudinary_url;
 
       frameImg.onload = async () => {
-        // Helper load image async
         const loadImg = (src: string) => new Promise<HTMLImageElement>((r) => { 
             const i = new window.Image(); i.onload = () => r(i); i.src = src; 
         });
 
-        // Loop foto (maksimal 4) dan gambar di canvas
         for (let i = 0; i < photos.length; i++) {
             if (i >= 4) break;
             const pImg = await loadImg(photos[i]);
-            // Posisi hardcoded sederhana (tengah vertikal)
             ctx.drawImage(pImg, 50, 50 + (i * 320), 500, 300);
         }
 
-        // Draw Frame Overlay di paling atas
         ctx.drawImage(frameImg, 0, 0, WIDTH, HEIGHT);
         resolve(canvas.toDataURL('image/jpeg', 0.90));
       };
@@ -244,27 +211,54 @@ export default function ResultPage() {
   };
 
   const handleNewSession = () => {
-    router.push('/camera');
+    router.push('/frames'); // Diperbaiki agar kembali ke pemilihan frame (flow yang benar)
   };
 
-  // --- RENDER UI (LANGSUNG TAMPIL TANPA LOADING SCREEN) ---
+  // --- RENDER UI (CUSTOM THEME APPLIED) ---
   return (
-    <div className="min-h-screen w-full bg-slate-950 relative overflow-y-auto font-sans text-slate-100 p-4 md:p-8">
+    // 1. CONTAINER UTAMA: Paksa Style Custom Theme
+    <div 
+      className="min-h-screen w-full relative overflow-y-auto font-sans p-4 md:p-8"
+      style={{ 
+        backgroundColor: 'var(--bg-color)', 
+        color: 'var(--foreground)' 
+      }}
+    >
       
-      {/* Background Effects */}
+      {/* 2. BACKGROUND EFFECTS: Pakai Primary & Secondary Color */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
-         <div className="absolute top-[-10%] left-[-10%] w-[600px] h-[600px] bg-blue-600/5 rounded-full blur-[120px]" />
-         <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-purple-600/5 rounded-full blur-[120px]" />
+         <div 
+            className="absolute top-[-10%] left-[-10%] w-[600px] h-[600px] rounded-full blur-[120px]"
+            style={{ backgroundColor: 'var(--primary-color)', opacity: 0.1 }}
+         />
+         <div 
+            className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] rounded-full blur-[120px]"
+            style={{ backgroundColor: 'var(--secondary-color)', opacity: 0.1 }}
+         />
       </div>
 
       <div className="max-w-6xl mx-auto relative z-10">
         
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-block px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-semibold uppercase tracking-wider mb-4">
+          <div 
+            className="inline-block px-4 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider mb-4 border"
+            style={{ 
+                backgroundColor: 'rgba(128,128,128, 0.1)', 
+                borderColor: 'var(--primary-color)',
+                color: 'var(--primary-color)'
+            }}
+          >
             Session ID: {sessionId ? sessionId.slice(-6) : '...'}
           </div>
-          <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight mb-4 bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-slate-400">
+          
+          <h1 
+            className="text-3xl md:text-5xl font-extrabold tracking-tight mb-4 bg-clip-text text-transparent"
+            style={{ 
+                backgroundImage: 'linear-gradient(to right, var(--foreground), rgba(var(--foreground-rgb), 0.5))',
+                color: 'var(--foreground)'
+            }}
+          >
             Scan Now, Download Fast! 🚀
           </h1>
         </div>
@@ -275,19 +269,37 @@ export default function ResultPage() {
           <div className="lg:col-span-7 space-y-6">
             
             {/* MAIN: Photo Strip */}
-            <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-6 backdrop-blur-md shadow-2xl">
+            <div 
+                className="rounded-3xl p-6 backdrop-blur-md shadow-2xl border"
+                style={{ 
+                    backgroundColor: 'rgba(128,128,128, 0.05)', 
+                    borderColor: 'rgba(128,128,128, 0.1)' 
+                }}
+            >
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <h3 className="text-lg font-bold flex items-center gap-2">
                   <span>📸</span> Your Result
                 </h3>
                 {compositePhoto && (
-                  <Button variant="primary" size="sm" onClick={handleDownloadComposite} className="bg-blue-600 hover:bg-blue-700 border-none">
+                  <Button 
+                    variant="primary" 
+                    size="sm" 
+                    onClick={handleDownloadComposite} 
+                    className="border-none text-white shadow-lg"
+                    style={{ backgroundColor: 'var(--primary-color)' }}
+                  >
                     Download File
                   </Button>
                 )}
               </div>
               
-              <div className="w-full bg-slate-950/50 rounded-xl overflow-hidden border border-slate-800/50 p-4 flex justify-center min-h-[300px]">
+              <div 
+                className="w-full rounded-xl overflow-hidden border p-4 flex justify-center min-h-[300px]"
+                style={{ 
+                    backgroundColor: 'rgba(0,0,0, 0.2)', // Gelap sedikit untuk kontras foto
+                    borderColor: 'rgba(128,128,128, 0.1)' 
+                }}
+              >
                 {compositePhoto ? (
                   <div className="relative w-full max-w-sm aspect-[3/5] shadow-2xl animate-in zoom-in duration-500">
                     <Image
@@ -299,9 +311,12 @@ export default function ResultPage() {
                     />
                   </div>
                 ) : (
-                  // SKELETON LOADING UNTUK PREVIEW
-                  <div className="flex flex-col items-center justify-center space-y-4 text-slate-500 py-20">
-                    <div className="w-12 h-12 border-4 border-slate-700 border-t-blue-500 rounded-full animate-spin"></div>
+                  // SKELETON LOADING UNTUK PREVIEW (Ikut warna tema)
+                  <div className="flex flex-col items-center justify-center space-y-4 py-20 opacity-50">
+                    <div 
+                        className="w-12 h-12 border-4 rounded-full animate-spin"
+                        style={{ borderColor: 'var(--foreground)', borderTopColor: 'var(--primary-color)' }}
+                    />
                     <p className="text-sm">Generating your beautiful layout...</p>
                   </div>
                 )}
@@ -311,32 +326,52 @@ export default function ResultPage() {
             {/* SUB: GIF & Singles */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* GIF Card */}
-              <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 backdrop-blur-md">
+              <div 
+                className="border rounded-2xl p-5 backdrop-blur-md"
+                style={{ 
+                    backgroundColor: 'rgba(128,128,128, 0.05)', 
+                    borderColor: 'rgba(128,128,128, 0.1)' 
+                }}
+              >
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-bold text-white text-sm">✨ Animation</h3>
-                  {gifUrl && <button onClick={handleDownloadGif} className="text-xs text-blue-400 hover:text-blue-300">Save GIF</button>}
+                  <h3 className="font-bold text-sm">✨ Animation</h3>
+                  {gifUrl && (
+                    <button 
+                        onClick={handleDownloadGif} 
+                        className="text-xs hover:opacity-80"
+                        style={{ color: 'var(--primary-color)' }}
+                    >
+                        Save GIF
+                    </button>
+                  )}
                 </div>
                 {gifUrl ? (
-                   <div className="relative w-full aspect-square bg-slate-950 rounded-lg overflow-hidden border border-slate-800 animate-in fade-in">
+                   <div className="relative w-full aspect-square bg-black/20 rounded-lg overflow-hidden border border-white/10 animate-in fade-in">
                       <Image src={gifUrl} alt="GIF" fill className="object-cover" unoptimized />
                    </div>
                 ) : (
-                   <div className="w-full aspect-square bg-slate-950 rounded-lg flex items-center justify-center text-xs text-slate-600 animate-pulse">
-                     Creating GIF...
+                   <div className="w-full aspect-square bg-black/20 rounded-lg flex items-center justify-center text-xs opacity-50 animate-pulse">
+                      Creating GIF...
                    </div>
                 )}
               </div>
 
               {/* Originals */}
-              <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 backdrop-blur-md">
-                <h3 className="font-bold text-white text-sm mb-3">🎞️ Original Shots</h3>
+              <div 
+                className="border rounded-2xl p-5 backdrop-blur-md"
+                style={{ 
+                    backgroundColor: 'rgba(128,128,128, 0.05)', 
+                    borderColor: 'rgba(128,128,128, 0.1)' 
+                }}
+              >
+                <h3 className="font-bold text-sm mb-3">🎞️ Original Shots</h3>
                 <div className="grid grid-cols-2 gap-2">
                   {capturedPhotos.length > 0 ? capturedPhotos.slice(0, 4).map((src, idx) => (
-                    <div key={idx} className="relative aspect-square rounded-md overflow-hidden bg-slate-950 border border-slate-800">
+                    <div key={idx} className="relative aspect-square rounded-md overflow-hidden bg-black/20 border border-white/10">
                       <Image src={src} alt={`Shot ${idx}`} fill className="object-cover" unoptimized />
                     </div>
                   )) : (
-                    <p className="text-xs text-slate-500">Loading photos...</p>
+                    <p className="text-xs opacity-50">Loading photos...</p>
                   )}
                 </div>
               </div>
@@ -346,16 +381,23 @@ export default function ResultPage() {
           {/* RIGHT COLUMN: QR & ACTIONS (Span 5/12) */}
           <div className="lg:col-span-5 space-y-6">
             
-            {/* QR Code Card - MUNCUL INSTAN */}
-            <div className="bg-gradient-to-b from-slate-800 to-slate-900 rounded-3xl p-8 border border-slate-700 shadow-2xl text-center relative overflow-hidden">
+            {/* QR Code Card - DINAMIS */}
+            <div 
+                className="rounded-3xl p-8 border shadow-2xl text-center relative overflow-hidden"
+                style={{ 
+                    // Gradient halus dari background utama
+                    background: 'linear-gradient(to bottom, rgba(128,128,128,0.1), rgba(128,128,128,0.05))',
+                    borderColor: 'rgba(128,128,128, 0.1)' 
+                }}
+            >
               
-              {/* Efek Pinggir kalau complete */}
+              {/* Efek Pinggir kalau complete (Hijau Sukses) */}
               {status === 'complete' && (
                 <div className="absolute inset-0 border-[3px] border-green-500/50 rounded-3xl animate-pulse pointer-events-none"></div>
               )}
 
-              <h3 className="text-xl font-bold text-white mb-2">Scan to Download</h3>
-              <p className="text-slate-400 text-sm mb-6">Open camera on your phone</p>
+              <h3 className="text-xl font-bold mb-2">Scan to Download</h3>
+              <p className="text-sm mb-6 opacity-60">Open camera on your phone</p>
               
               <div className="bg-white p-4 rounded-2xl inline-block shadow-lg mb-6">
                 {downloadUrl ? (
@@ -365,13 +407,12 @@ export default function ResultPage() {
                 )}
               </div>
               
-              {/* STATUS INDIKATOR DI BAWAH QR CODE (DINAMIS) */}
-              <div className={`py-3 px-4 rounded-xl border flex items-center justify-center gap-3 transition-all duration-500 
-                ${status === 'complete' 
-                  ? 'bg-green-500/10 border-green-500/30 text-green-400' 
-                  : status === 'error'
-                  ? 'bg-red-500/10 border-red-500/30 text-red-400'
-                  : 'bg-blue-500/10 border-blue-500/30 text-blue-400'
+              {/* STATUS INDIKATOR (DINAMIS) */}
+              <div 
+                className={`py-3 px-4 rounded-xl border flex items-center justify-center gap-3 transition-all duration-500 ${
+                    status === 'complete' ? 'bg-green-500/10 border-green-500/30 text-green-500' :
+                    status === 'error' ? 'bg-red-500/10 border-red-500/30 text-red-500' :
+                    'bg-blue-500/10 border-blue-500/30 text-blue-500'
                 }`}
               >
                 {/* Ikon Status */}
@@ -395,7 +436,7 @@ export default function ResultPage() {
               
               {/* Pesan Tambahan */}
               {status !== 'complete' && status !== 'error' && (
-                <p className="text-xs text-slate-500 mt-3 animate-pulse">
+                <p className="text-xs opacity-50 mt-3 animate-pulse">
                   You can scan now. The photos will appear on your phone automatically once processed.
                 </p>
               )}
@@ -406,13 +447,22 @@ export default function ResultPage() {
             <div className="grid grid-cols-2 gap-4">
               <Button 
                 onClick={() => router.push('/')}
-                className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+                className="w-full py-4 border opacity-80 hover:opacity-100"
+                style={{ 
+                    backgroundColor: 'rgba(128,128,128, 0.1)', 
+                    borderColor: 'rgba(128,128,128, 0.2)',
+                    color: 'var(--foreground)'
+                }}
               >
                 Back Home
               </Button>
               <Button 
                 onClick={handleNewSession}
-                className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white shadow-lg shadow-blue-900/20"
+                className="w-full py-4 text-white shadow-lg"
+                style={{ 
+                    background: 'linear-gradient(to right, var(--primary-color), var(--secondary-color))',
+                    boxShadow: '0 10px 20px -5px var(--primary-color)'
+                }}
               >
                 New Session
               </Button>

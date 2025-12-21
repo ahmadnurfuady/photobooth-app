@@ -11,7 +11,7 @@ import toast from 'react-hot-toast';
 interface FrameUploadFormProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess:  () => void;
+  onSuccess: () => void;
 }
 
 export const FrameUploadForm: React.FC<FrameUploadFormProps> = ({
@@ -99,13 +99,13 @@ export const FrameUploadForm: React.FC<FrameUploadFormProps> = ({
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e. target.files?.[0];
+    const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       handleFileSelect(selectedFile);
     }
   };
 
-  const handleDragOver = (e: React. DragEvent<HTMLDivElement>) => {
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(true);
   };
@@ -125,7 +125,7 @@ export const FrameUploadForm: React.FC<FrameUploadFormProps> = ({
     }
   };
 
-  const handleSubmit = async (e:  React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!validateForm() || !file) return;
@@ -154,8 +154,8 @@ export const FrameUploadForm: React.FC<FrameUploadFormProps> = ({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON. stringify({
-          name: formData.name. trim(),
+        body: JSON.stringify({
+          name: formData.name.trim(),
           file: base64File,
           is_active: formData.isActive,
         }),
@@ -164,7 +164,7 @@ export const FrameUploadForm: React.FC<FrameUploadFormProps> = ({
       clearInterval(progressInterval);
       setUploadProgress(100);
 
-      if (! response.ok) {
+      if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to upload frame');
       }
@@ -175,7 +175,7 @@ export const FrameUploadForm: React.FC<FrameUploadFormProps> = ({
       resetForm();
       onSuccess();
       onClose();
-    } catch (error:  any) {
+    } catch (error: any) {
       console.error('Upload error:', error);
       toast.error(error.message || 'Failed to upload frame');
       setUploadProgress(0);
@@ -185,7 +185,7 @@ export const FrameUploadForm: React.FC<FrameUploadFormProps> = ({
   };
 
   const handleClose = () => {
-    if (! loading) {
+    if (!loading) {
       resetForm();
       onClose();
     }
@@ -197,47 +197,62 @@ export const FrameUploadForm: React.FC<FrameUploadFormProps> = ({
       onClose={handleClose}
       title="Upload New Frame"
       size="lg"
-      closeOnBackdropClick={! loading}
+      closeOnBackdropClick={!loading}
+      // Update Footer agar button terlihat bagus di dark mode
       footer={
-        <>
-          <Button variant="ghost" onClick={handleClose} disabled={loading}>
+        <div className="flex gap-3 w-full">
+          <Button 
+            variant="secondary" 
+            onClick={handleClose} 
+            disabled={loading}
+            className="flex-1 bg-slate-800 text-slate-300 hover:bg-slate-700 border-slate-700"
+          >
             Cancel
           </Button>
-          <Button onClick={handleSubmit} loading={loading} disabled={loading}>
+          <Button 
+            onClick={handleSubmit} 
+            loading={loading} 
+            disabled={loading}
+            className="flex-1 bg-blue-600 hover:bg-blue-500 text-white"
+          >
             Upload Frame
           </Button>
-        </>
+        </div>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6 text-slate-200">
         {/* Frame Name */}
-        <Input
-          label="Frame Name"
-          type="text"
-          placeholder="Enter frame name (e.g., Birthday Frame)"
-          value={formData. name}
-          onChange={(e) => {
-            setFormData({ ...formData, name: e.target. value });
-            if (errors.name) setErrors({ ...errors, name: '' });
-          }}
-          error={errors. name}
-          disabled={loading}
-          required
-        />
+        {/* Styling Input disesuaikan dengan dark mode */}
+        <div>
+          <label className="block text-sm font-medium text-slate-300 mb-2">Frame Name</label>
+          <Input
+            type="text"
+            placeholder="Enter frame name (e.g., Birthday Frame)"
+            value={formData.name}
+            onChange={(e) => {
+              setFormData({ ...formData, name: e.target.value });
+              if (errors.name) setErrors({ ...errors, name: '' });
+            }}
+            disabled={loading}
+            required
+            className={`bg-slate-950 border-slate-700 text-white placeholder:text-slate-600 focus:border-blue-500 ${errors.name ? 'border-red-500' : ''}`}
+          />
+          {errors.name && <p className="mt-1 text-sm text-red-500">{errors.name}</p>}
+        </div>
 
         {/* File Upload Area */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-slate-300 mb-2">
             Frame Image
           </label>
           
           <div
-            className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+            className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all ${
               isDragging
-                ? 'border-blue-500 bg-blue-50'
+                ? 'border-blue-500 bg-blue-500/10'
                 : errors.file
-                ?  'border-red-500 bg-red-50'
-                : 'border-gray-300 hover:border-gray-400'
+                ? 'border-red-500 bg-red-500/10'
+                : 'border-slate-700 hover:border-slate-500 hover:bg-slate-800/50 bg-slate-900/50'
             }`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
@@ -252,50 +267,53 @@ export const FrameUploadForm: React.FC<FrameUploadFormProps> = ({
               disabled={loading}
             />
 
-            {preview ?  (
+            {preview ? (
               <div className="space-y-4">
                 {/* Preview Image */}
-                <div className="relative w-full h-64 bg-gray-100 rounded-lg overflow-hidden">
+                <div className="relative w-full h-64 bg-slate-950/50 rounded-lg overflow-hidden border border-slate-700">
                   <img
                     src={preview}
                     alt="Preview"
-                    className="w-full h-full object-contain"
+                    className="w-full h-full object-contain bg-[url('/transparent-grid.png')]" // Opsional: Grid background untuk transparan
                   />
                 </div>
 
                 {/* File Info */}
-                <div className="text-sm text-gray-600">
-                  <p className="font-medium">{file?. name}</p>
-                  <p className="text-gray-500">{file && formatFileSize(file.size)}</p>
+                <div className="text-sm text-slate-400">
+                  <p className="font-medium text-slate-200">{file?.name}</p>
+                  <p>{file && formatFileSize(file.size)}</p>
                 </div>
 
                 {/* Change File Button */}
-                {! loading && (
+                {!loading && (
                   <Button
                     type="button"
                     variant="secondary"
                     size="sm"
                     onClick={() => fileInputRef.current?.click()}
+                    className="bg-slate-800 text-slate-300 hover:bg-slate-700 border-slate-600"
                   >
                     Change File
                   </Button>
                 )}
               </div>
             ) : (
-              <div className="space-y-4">
-                <svg
-                  className="mx-auto h-12 w-12 text-gray-400"
-                  stroke="currentColor"
-                  fill="none"
-                  viewBox="0 0 48 48"
-                >
-                  <path
-                    d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
+              <div className="space-y-4 py-4">
+                <div className="w-16 h-16 mx-auto bg-slate-800 rounded-full flex items-center justify-center text-slate-500">
+                  <svg
+                    className="h-8 w-8"
+                    stroke="currentColor"
+                    fill="none"
+                    viewBox="0 0 48 48"
+                  >
+                    <path
+                      d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                      strokeWidth={2}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </div>
                 <div>
                   <Button
                     type="button"
@@ -303,12 +321,13 @@ export const FrameUploadForm: React.FC<FrameUploadFormProps> = ({
                     size="sm"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={loading}
+                    className="bg-slate-800 text-slate-300 hover:bg-slate-700 border-slate-600"
                   >
                     Choose File
                   </Button>
-                  <p className="mt-2 text-sm text-gray-500">or drag and drop</p>
+                  <p className="mt-3 text-sm text-slate-500">or drag and drop here</p>
                 </div>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-slate-600">
                   PNG, JPG, JPEG, WebP up to 10MB
                 </p>
               </div>
@@ -316,12 +335,12 @@ export const FrameUploadForm: React.FC<FrameUploadFormProps> = ({
           </div>
 
           {errors.file && (
-            <p className="mt-2 text-sm text-red-600">{errors.file}</p>
+            <p className="mt-2 text-sm text-red-500">{errors.file}</p>
           )}
         </div>
 
         {/* Active Status Toggle */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 bg-slate-900/50 p-3 rounded-lg border border-slate-800">
           <label className="relative inline-flex items-center cursor-pointer">
             <input
               type="checkbox"
@@ -330,23 +349,24 @@ export const FrameUploadForm: React.FC<FrameUploadFormProps> = ({
               className="sr-only peer"
               disabled={loading}
             />
-            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+            {/* Toggle Switch Styling - Dark Mode */}
+            <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
           </label>
-          <span className="text-sm font-medium text-gray-700">
-            Set as active frame
+          <span className="text-sm font-medium text-slate-300">
+            Set as active frame immediately
           </span>
         </div>
 
         {/* Upload Progress */}
         {loading && uploadProgress > 0 && (
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm text-gray-600">
+          <div className="space-y-2 bg-slate-900/80 p-4 rounded-lg border border-slate-800">
+            <div className="flex justify-between text-sm text-slate-400">
               <span>Uploading...</span>
               <span>{uploadProgress}%</span>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+            <div className="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
               <div
-                className="bg-blue-600 h-2 transition-all duration-300 ease-out"
+                className="bg-blue-500 h-2 transition-all duration-300 ease-out shadow-[0_0_10px_rgba(59,130,246,0.5)]"
                 style={{ width: `${uploadProgress}%` }}
               />
             </div>

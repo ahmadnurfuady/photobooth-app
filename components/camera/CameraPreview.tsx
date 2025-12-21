@@ -102,7 +102,7 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
     return null;
   }, [frame, photoNumber]);
 
-  // 4. LOGIKA BOUNDING BOX (KOTAK HIJAU)
+  // 4. LOGIKA BOUNDING BOX
   const boundingBox = useMemo(() => {
     if (!currentSlot || !frameDimensions) {
       return { width: 300, height: 225, left: '50%', top: '50%', transform: 'translate(-50%, -50%)', aspectRatio: 4/3 };
@@ -150,7 +150,7 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
     }, 1000);
   }, [isCapturing, currentCapturedPhoto]);
 
-  // 6. FUNGSI CAPTURE (SMART OFFSET FIX)
+  // 6. FUNGSI CAPTURE
   const capturePhoto = useCallback(() => {
     if (!webcamRef.current || !cameraContainerRef.current || !currentSlot) return;
 
@@ -215,29 +215,36 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
     }
   }, [onCapture, currentSlot, boundingBox, containerDims]);
 
-  // 7. RENDER UI (PREMIUM THEME MATCHING LANDING PAGE)
+  // 7. RENDER UI (CUSTOM THEME APPLIED)
   return (
-    <div className="h-screen w-screen bg-slate-950 flex flex-col lg:flex-row gap-4 p-4 lg:p-6 overflow-hidden relative font-sans text-slate-100">
+    // Container UI: Background Transparan (karena parent sudah berwarna)
+    // text-slate-100 diganti color: var(--foreground)
+    <div 
+        className="h-full w-full flex flex-col lg:flex-row gap-4 p-4 lg:p-6 overflow-hidden relative font-sans"
+        style={{ color: 'var(--foreground)' }}
+    >
       
-      {/* --- BACKGROUND GLOW EFFECTS (Konsisten dengan Landing Page) --- */}
-      <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-purple-600/10 rounded-full blur-[120px] pointer-events-none" />
-
-      {/* --- BAGIAN KIRI: CAMERA PREVIEW --- */}
+      {/* BAGIAN KIRI: CAMERA PREVIEW */}
       <div className="flex-1 flex flex-col items-center justify-center relative min-h-0 z-10">
         
         {/* HEADER */}
-        <div className="w-full max-w-2xl flex items-center justify-between text-slate-100 mb-2 shrink-0">
+        <div className="w-full max-w-2xl flex items-center justify-between mb-2 shrink-0">
           <div>
             <h2 className="text-lg lg:text-xl font-bold tracking-tight">
               Photo {photoNumber} / {actualTotalPhotos}
             </h2>
-            <p className="text-xs text-slate-400">Frame: {frame.name}</p>
+            <p className="text-xs opacity-60">Frame: {frame.name}</p>
           </div>
 
           <button
             onClick={() => setMirrored(!mirrored)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/50 border border-slate-700 hover:bg-slate-700/50 transition-all text-xs lg:text-sm font-medium backdrop-blur-md"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs lg:text-sm font-medium backdrop-blur-md"
+            // Style tombol Mirrored dinamis
+            style={{ 
+                backgroundColor: 'rgba(128,128,128, 0.2)', 
+                borderColor: 'rgba(128,128,128, 0.3)',
+                color: 'var(--foreground)'
+            }}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
@@ -249,7 +256,9 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
         {/* CONTAINER WEBCAM RESPONSIVE */}
         <div 
           ref={cameraContainerRef}
-          className="relative w-full max-w-2xl aspect-[4/3] bg-black rounded-2xl overflow-hidden shadow-2xl shadow-blue-900/10 border-[3px] border-slate-800/50"
+          className="relative w-full max-w-2xl aspect-[4/3] bg-black rounded-2xl overflow-hidden shadow-2xl border-[3px]"
+          // Border container webcam agar tidak hardcoded slate
+          style={{ borderColor: 'rgba(128,128,128, 0.3)' }}
         >
           <div className="absolute inset-0">
             <Webcam
@@ -262,7 +271,7 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
             />
           </div>
 
-          {/* Green Bounding Box Overlay */}
+          {/* Bounding Box Overlay (KOTAK FOKUS) */}
           {currentSlot && !currentCapturedPhoto && (
             <>
               {/* Overlay Gelap */}
@@ -282,22 +291,24 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
                 />
               </div>
 
-              {/* Garis Hijau Neon */}
+              {/* Garis FOKUS (Mengikuti Warna Primary agar match tema) */}
               <div 
-                className="absolute border-4 border-green-500 pointer-events-none z-10 shadow-[0_0_30px_rgba(34,197,94,0.6)]"
+                className="absolute border-4 pointer-events-none z-10"
                 style={{
                   width: `${boundingBox.width}px`,
                   height: `${boundingBox.height}px`,
                   left: boundingBox.left,
                   top: boundingBox.top,
                   transform: boundingBox.transform,
+                  borderColor: 'var(--primary-color)', // DYNAMIC COLOR
+                  boxShadow: '0 0 30px var(--primary-color)' // DYNAMIC GLOW
                 }}
               >
                 {/* Hiasan Sudut */}
-                <div className="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-green-400" />
-                <div className="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-green-400" />
-                <div className="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4 border-green-400" />
-                <div className="absolute -bottom-1 -right-1 w-6 h-6 border-b-4 border-r-4 border-green-400" />
+                <div className="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4" style={{ borderColor: 'var(--primary-color)' }} />
+                <div className="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4" style={{ borderColor: 'var(--primary-color)' }} />
+                <div className="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4" style={{ borderColor: 'var(--primary-color)' }} />
+                <div className="absolute -bottom-1 -right-1 w-6 h-6 border-b-4 border-r-4" style={{ borderColor: 'var(--primary-color)' }} />
               </div>
             </>
           )}
@@ -312,7 +323,10 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
           {/* Captured Notification */}
           {currentCapturedPhoto && (
             <div className="absolute top-4 left-0 right-0 text-center z-20">
-              <span className="bg-green-500 text-white px-4 py-2 rounded-full font-bold text-sm shadow-lg shadow-green-500/30 inline-flex items-center gap-2">
+              <span 
+                className="text-white px-4 py-2 rounded-full font-bold text-sm shadow-lg inline-flex items-center gap-2"
+                style={{ backgroundColor: 'var(--primary-color)' }}
+              >
                 Photo Captured!
               </span>
             </div>
@@ -327,17 +341,31 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
                 size="lg"
                 onClick={startCountdown}
                 disabled={isCapturing}
-                className="rounded-full w-16 h-16 lg:w-20 lg:h-20 p-0 bg-white hover:bg-slate-200 text-slate-900 shadow-[0_0_40px_-10px_rgba(255,255,255,0.4)] transition-transform hover:scale-105 active:scale-95"
+                className="rounded-full w-16 h-16 lg:w-20 lg:h-20 p-0 bg-white hover:bg-slate-200 text-slate-900 shadow-[0_0_40px_-10px_rgba(255,255,255,0.4)] transition-transform hover:scale-105 active:scale-95 border-none"
               >
                 {isCapturing ? (
-                  <div className="animate-spin w-8 h-8 lg:w-10 lg:h-10 border-4 border-slate-300 border-t-blue-600 rounded-full" />
+                  <div 
+                    className="animate-spin w-8 h-8 lg:w-10 lg:h-10 border-4 border-slate-300 rounded-full" 
+                    style={{ borderTopColor: 'var(--primary-color)' }}
+                  />
                 ) : (
                   <div className="w-12 h-12 lg:w-16 lg:h-16 rounded-full border-[4px] border-slate-300 flex items-center justify-center group-hover:border-slate-400">
-                    <div className="w-10 h-10 lg:w-12 lg:h-12 bg-red-500 rounded-full shadow-inner" />
+                    {/* Tombol Shutter Mengikuti Warna Primary */}
+                    <div 
+                        className="w-10 h-10 lg:w-12 lg:h-12 rounded-full shadow-inner" 
+                        style={{ backgroundColor: 'var(--primary-color)' }}
+                    />
                   </div>
                 )}
               </Button>
-              <p className="text-slate-200 text-center text-xs lg:text-sm font-medium bg-slate-900/50 px-4 py-1.5 rounded-full backdrop-blur-md border border-slate-800">
+              <p 
+                className="text-center text-xs lg:text-sm font-medium px-4 py-1.5 rounded-full backdrop-blur-md border"
+                style={{ 
+                    backgroundColor: 'rgba(128,128,128, 0.2)', 
+                    borderColor: 'rgba(128,128,128, 0.3)',
+                    color: 'var(--foreground)'
+                }}
+              >
                 Position yourself inside the box
               </p>
             </div>
@@ -345,15 +373,27 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
         </div>
       </div>
 
-      {/* --- BAGIAN KANAN: FRAME PREVIEW (GLASSMORPHISM CARD) --- */}
+      {/* --- BAGIAN KANAN: FRAME PREVIEW (CUSTOM THEMED) --- */}
       <div className="hidden lg:flex w-80 lg:w-96 flex-col justify-center shrink-0 z-10">
-        <div className="bg-slate-900/60 backdrop-blur-md rounded-3xl shadow-2xl p-6 h-[85vh] flex flex-col border border-slate-800/60">
+        <div 
+            className="backdrop-blur-md rounded-3xl shadow-2xl p-6 h-[85vh] flex flex-col border"
+            style={{ 
+                backgroundColor: 'rgba(128,128,128, 0.1)', 
+                borderColor: 'rgba(128,128,128, 0.2)' 
+            }}
+        >
           <div className="text-center mb-4 flex-shrink-0">
-            <h3 className="text-lg font-bold text-white tracking-tight">Live Preview</h3>
-            <p className="text-xs text-slate-400">Your photos fit into the frame</p>
+            <h3 className="text-lg font-bold tracking-tight" style={{ color: 'var(--foreground)' }}>Live Preview</h3>
+            <p className="text-xs opacity-60">Your photos fit into the frame</p>
           </div>
 
-          <div className="flex-1 flex items-center justify-center overflow-hidden bg-slate-950/50 rounded-2xl p-4 border border-slate-800 inner-shadow">
+          <div 
+            className="flex-1 flex items-center justify-center overflow-hidden rounded-2xl p-4 border inner-shadow"
+            style={{ 
+                backgroundColor: 'rgba(0,0,0, 0.2)', 
+                borderColor: 'rgba(128,128,128, 0.2)' 
+            }}
+          >
             <div 
               className="relative bg-white shadow-lg transition-all duration-300"
               style={{
@@ -393,23 +433,59 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
           <div className="mt-6 flex-shrink-0">
             {currentCapturedPhoto && (
               <div className="space-y-3 animate-in slide-in-from-bottom-2">
-                <Button variant="secondary" onClick={onRetake} className="w-full border border-slate-700 bg-slate-800 hover:bg-slate-700 text-white shadow-sm">
+                
+                <Button 
+                    variant="secondary" 
+                    onClick={onRetake} 
+                    className="w-full shadow-sm border"
+                    // Style manual untuk button Retake
+                    style={{ 
+                        backgroundColor: 'rgba(128,128,128, 0.2)', 
+                        borderColor: 'rgba(128,128,128, 0.3)',
+                        color: 'var(--foreground)'
+                    }}
+                >
                   Retake Photo
                 </Button>
+
                 {photoNumber < actualTotalPhotos ? (
-                  <Button variant="primary" onClick={onNext} className="w-full shadow-lg shadow-blue-900/20 bg-blue-600 hover:bg-blue-700 text-white">
+                  <Button 
+                    onClick={onNext} 
+                    className="w-full shadow-lg text-white"
+                    // Style manual Next Photo (Primary)
+                    style={{ 
+                        backgroundColor: 'var(--primary-color)',
+                        color: 'var(--bg-color)' // Invert text
+                    }}
+                  >
                     Next Photo
                   </Button>
                 ) : (
-                  <Button variant="primary" onClick={onFinish} className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white shadow-lg shadow-green-900/20">
+                  <Button 
+                    onClick={onFinish} 
+                    className="w-full text-white shadow-lg"
+                    // Style manual Finish (Gradient)
+                    style={{ 
+                        background: 'linear-gradient(to right, var(--primary-color), var(--secondary-color))',
+                        color: '#fff'
+                    }}
+                  >
                     Finish Session
                   </Button>
                 )}
               </div>
             )}
+            
+            {/* PROGRESS DOTS */}
             <div className="mt-6 flex justify-center gap-2">
               {Array.from({ length: actualTotalPhotos }).map((_, index) => (
-                <div key={index} className={`h-1.5 rounded-full transition-all duration-300 ${capturedPhotos[index] ? 'w-8 bg-green-500' : index === photoNumber - 1 ? 'w-8 bg-blue-500' : 'w-1.5 bg-slate-700'}`} />
+                <div 
+                    key={index} 
+                    className={`h-1.5 rounded-full transition-all duration-300 ${index === photoNumber - 1 || capturedPhotos[index] ? 'w-8' : 'w-1.5'}`} 
+                    style={{ 
+                        backgroundColor: capturedPhotos[index] ? 'var(--primary-color)' : index === photoNumber - 1 ? 'var(--secondary-color)' : 'rgba(128,128,128, 0.3)'
+                    }}
+                />
               ))}
             </div>
           </div>

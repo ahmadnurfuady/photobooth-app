@@ -17,12 +17,12 @@ export default function CapturePage() {
   const [currentCapturedPhoto, setCurrentCapturedPhoto] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
 
-  // Load Frame & Initialize Slots
+  // --- LOGIKA LOAD FRAME & INIT SLOT (TIDAK BERUBAH) ---
   useEffect(() => {
     const frameData = sessionStorage.getItem('selectedFrame');
     if (!frameData) {
       toast.error('No frame selected. Please select a frame first.');
-      router.push('/camera');
+      router.push('/camera'); // Ini mengarah ke halaman pilih frame kamu
       return;
     }
 
@@ -30,7 +30,6 @@ export default function CapturePage() {
       const frame = JSON.parse(frameData) as Frame;
       setSelectedFrame(frame);
 
-      // ✅ PERBAIKAN LOGIKA (Typescript Safe)
       // Cek apakah photo_slots ada DAN panjangnya > 0
       const hasSlots = frame.photo_slots && frame.photo_slots.length > 0;
       
@@ -48,17 +47,15 @@ export default function CapturePage() {
     }
   }, [router]);
 
+  // --- HANDLERS (TIDAK BERUBAH) ---
   const handleCapture = (imageSrc: string) => {
     setCurrentCapturedPhoto(imageSrc);
-    
-    // Update photos array
     const newPhotos = [...photos];
     newPhotos[currentPhotoIndex] = imageSrc;
     setPhotos(newPhotos);
   };
 
   const handleRetake = () => {
-    // Clear current photo
     setCurrentCapturedPhoto(null);
     const newPhotos = [...photos];
     newPhotos[currentPhotoIndex] = null;
@@ -67,8 +64,6 @@ export default function CapturePage() {
 
   const handleNext = () => {
     if (!currentCapturedPhoto) return;
-
-    // Move to next photo
     setCurrentPhotoIndex(currentPhotoIndex + 1);
     setCurrentCapturedPhoto(null);
   };
@@ -79,29 +74,22 @@ export default function CapturePage() {
     setProcessing(true);
 
     try {
-      // ✅ PERBAIKAN LOGIKA (Typescript Safe)
-      // Sama seperti di atas, kita pastikan pengecekan null safety
       const hasSlots = selectedFrame.photo_slots && selectedFrame.photo_slots.length > 0;
-
       const requiredPhotoCount = 
         selectedFrame.frame_config?.photo_count || 
         (hasSlots ? selectedFrame.photo_slots!.length : 3);
 
-      // Filter foto yang sudah diambil (tidak null)
       const capturedPhotos = photos.filter(p => p !== null) as string[];
       
-      // Validasi jumlah foto
       if (capturedPhotos.length !== requiredPhotoCount) {
         toast.error(`Please capture all ${requiredPhotoCount} photos`);
         setProcessing(false);
         return;
       }
 
-      // Store photos and frame in sessionStorage
       sessionStorage.setItem('capturedPhotos', JSON.stringify(capturedPhotos));
       sessionStorage.setItem('selectedFrame', JSON.stringify(selectedFrame));
 
-      // Navigate to processing/result page
       router.push('/result');
     } catch (error) {
       console.error('Error processing photos:', error);
@@ -110,29 +98,67 @@ export default function CapturePage() {
     }
   };
 
+  // --- TAMPILAN LOADING (DISESUAIKAN TEMA) ---
   if (!selectedFrame) {
-    return <LoadingOverlay message="Loading..." />;
+    return (
+      <div 
+        className="h-screen w-screen flex items-center justify-center"
+        style={{ backgroundColor: 'var(--bg-color)', color: 'var(--foreground)' }}
+      >
+        <LoadingOverlay message="Loading..." />
+      </div>
+    );
   }
 
+  // --- TAMPILAN PROCESSING (DISESUAIKAN TEMA) ---
   if (processing) {
-    return <LoadingOverlay message="Processing your photos... 🎨" />;
+    return (
+      <div 
+        className="h-screen w-screen flex items-center justify-center"
+        style={{ backgroundColor: 'var(--bg-color)', color: 'var(--foreground)' }}
+      >
+        <LoadingOverlay message="Processing your photos... 🎨" />
+      </div>
+    );
   }
 
   const actualTotalPhotos = photos.length > 0 ? photos.length : 3;
 
+  // --- TAMPILAN UTAMA (CUSTOM THEME APPLIED) ---
   return (
-    <div className="h-screen w-screen">
-      <CameraPreview
-        onCapture={handleCapture}
-        onRetake={handleRetake}
-        onNext={handleNext}
-        onFinish={handleFinish}
-        photoNumber={currentPhotoIndex + 1}
-        totalPhotos={actualTotalPhotos}
-        frame={selectedFrame}
-        capturedPhotos={photos}
-        currentCapturedPhoto={currentCapturedPhoto}
+    // Wrapper Utama: Menggunakan var CSS agar background mengikuti Admin
+    <div 
+      className="h-screen w-screen relative overflow-hidden transition-colors duration-500"
+      style={{ 
+        backgroundColor: 'var(--bg-color)', 
+        color: 'var(--foreground)' 
+      }}
+    >
+      
+      {/* Background Ambience (Blobs) - Agar konsisten dengan halaman sebelumnya */}
+      <div 
+        className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] rounded-full blur-[120px] pointer-events-none opacity-20 z-0" 
+        style={{ backgroundColor: 'var(--primary-color)' }}
       />
+      <div 
+        className="absolute bottom-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full blur-[120px] pointer-events-none opacity-20 z-0"
+        style={{ backgroundColor: 'var(--secondary-color)' }}
+      />
+
+      {/* Komponen Camera Preview (Logic tetap, tapi dibungkus tema) */}
+      <div className="relative z-10 h-full w-full">
+        <CameraPreview
+          onCapture={handleCapture}
+          onRetake={handleRetake}
+          onNext={handleNext}
+          onFinish={handleFinish}
+          photoNumber={currentPhotoIndex + 1}
+          totalPhotos={actualTotalPhotos}
+          frame={selectedFrame}
+          capturedPhotos={photos}
+          currentCapturedPhoto={currentCapturedPhoto}
+        />
+      </div>
     </div>
   );
 }
