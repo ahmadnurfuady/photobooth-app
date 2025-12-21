@@ -5,6 +5,7 @@ import React, { useRef, useState, useCallback, useMemo, useEffect } from 'react'
 import Webcam from 'react-webcam';
 import { Button } from '@/components/ui/Button';
 import { Frame, PhotoSlot } from '@/types';
+import { FIXED_SLOT_SIZES } from '@/lib/framePresets';
 
 export interface CameraPreviewProps {
   onCapture: (imageSrc: string) => void;
@@ -57,37 +58,39 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
 
   // Get current photo slot (based on photoNumber)
   const currentSlot = useMemo((): PhotoSlot | null => {
-    if (!frame.photo_slots || frame.photo_slots.length === 0) {
-      // Generate default slots based on frame_config if available
-      if (frame.frame_config) {
-        const { photo_count, aspect_ratio } = frame.frame_config;
-        const slotHeight = 25; // percentage
-        const slotWidth = slotHeight * aspect_ratio;
-        const gap = 5;
-        const defaultSlots: PhotoSlot[] = [];
-        
-        for (let i = 0; i < photo_count; i++) {
-          defaultSlots.push({
-            id: i + 1,
-            x: (100 - slotWidth) / 2,
-            y: 10 + i * (slotHeight + gap),
-            width: slotWidth,
-            height: slotHeight,
-          });
-        }
-        return defaultSlots[photoNumber - 1] || null;
-      }
+    // If photo_slots exist, use them
+    if (frame.photo_slots && frame.photo_slots.length > 0) {
+      return frame.photo_slots[photoNumber - 1] || null;
+    }
+    
+    // Generate default slots based on frame_config if available
+    if (frame.frame_config) {
+      const { photo_count } = frame.frame_config;
+      const slotSizeConfig = FIXED_SLOT_SIZES[photo_count as keyof typeof FIXED_SLOT_SIZES] || FIXED_SLOT_SIZES[3];
+      const slotWidth = slotSizeConfig.width;
+      const slotHeight = slotSizeConfig.height;
+      const gap = 5;
+      const defaultSlots: PhotoSlot[] = [];
       
-      // Ultimate fallback - assume 3 photos with 1.5 aspect ratio
-      const defaultSlots: PhotoSlot[] = [
-        { id: 1, x: 10, y: 10, width: 37.5, height: 25 },  // 1.5 aspect ratio
-        { id: 2, x: 10, y: 40, width: 37.5, height: 25 },
-        { id: 3, x: 10, y: 70, width: 37.5, height: 25 },
-      ];
+      for (let i = 0; i < photo_count; i++) {
+        defaultSlots.push({
+          id: i + 1,
+          x: (100 - slotWidth) / 2,
+          y: 10 + i * (slotHeight + gap),
+          width: slotWidth,
+          height: slotHeight,
+        });
+      }
       return defaultSlots[photoNumber - 1] || null;
     }
     
-    return frame.photo_slots[photoNumber - 1] || null;
+    // Ultimate fallback - assume 3 photos with 4:3 aspect ratio
+    const defaultSlots: PhotoSlot[] = [
+      { id: 1, x: 20, y: 10, width: 60, height: 45 },  // 4:3 aspect ratio
+      { id: 2, x: 20, y: 40, width: 60, height: 45 },
+      { id: 3, x: 20, y: 70, width: 60, height: 45 },
+    ];
+    return defaultSlots[photoNumber - 1] || null;
   }, [frame.photo_slots, frame.frame_config, photoNumber]);
 
   // Calculate centered bounding box with CORRECT aspect ratio from admin slot

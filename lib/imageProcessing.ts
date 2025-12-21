@@ -1,5 +1,6 @@
 // lib/imageProcessing.ts
 import type { PhotoSlot } from '@/types';
+import { FIXED_SLOT_SIZES } from './framePresets';
 
 /**
  * Apply frame overlay to photo using Canvas API
@@ -64,12 +65,13 @@ export async function applyFrameToPhoto(
 export async function createPhotoStripWithFrame(
   photos: string[],
   frameSrc: string,
-  photoSlots?: PhotoSlot[] | null
+  photoSlots?: PhotoSlot[] | null,
+  photoCount?: number
 ): Promise<string> {
   return new Promise(async (resolve, reject) => {
     try {
-      if (photos.length !== 3) {
-        reject(new Error('Exactly 3 photos required'));
+      if (photos.length === 0) {
+        reject(new Error('At least 1 photo required'));
         return;
       }
 
@@ -105,22 +107,26 @@ export async function createPhotoStripWithFrame(
         }>;
 
         if (photoSlots && photoSlots.length >= 1) {
-          // ✅ FORCE 4:3 LANDSCAPE FOR ALL PHOTOS (regardless of frame slots)
-          const FORCE_ASPECT_RATIO = 4 / 3;  // 4:3 landscape
+          // ✅ Calculate dimensions from photo_count (FIXED 4:3 ratio)
+          const actualPhotoCount = photoCount || photos.length;
+          const slotSizeConfig = FIXED_SLOT_SIZES[actualPhotoCount as keyof typeof FIXED_SLOT_SIZES] || FIXED_SLOT_SIZES[3];
           
-          slots = photoSlots.map((s, index) => {
+          slots = photoSlots.slice(0, photos.length).map((s, index) => {
             const slotX = Math.round((s.x / 100) * frameWidth);
             const slotY = Math.round((s.y / 100) * frameHeight);
-            const slotWidth = Math.round((s.width / 100) * frameWidth);
-            // Calculate height from width using 4:3 ratio
-            const slotHeight = Math.round(slotWidth / FORCE_ASPECT_RATIO);
-            const aspectRatio = FORCE_ASPECT_RATIO;
+            
+            // ✅ Calculate dimensions from photo count (FIXED 4:3 ratio)
+            const slotWidth = Math.round((slotSizeConfig.width / 100) * frameWidth);
+            const slotHeight = Math.round((slotSizeConfig.height / 100) * frameHeight);
+            const aspectRatio = slotWidth / slotHeight; // Should be ~1.333
 
-            console.log(`Slot ${index + 1} (FORCED 4:3):`, {
-              percent: `${s.width.toFixed(2)}% × ${s.height.toFixed(2)}%`,
-              pixels: `${slotWidth}px × ${slotHeight}px (forced 4:3)`,
+            console.log(`📍 Slot ${index + 1} (from photo_count=${actualPhotoCount}):`, {
+              position: `${s.x.toFixed(1)}%, ${s.y.toFixed(1)}%`,
+              pixels: `(${slotX}, ${slotY})`,
+              dimensions: `${slotWidth}px × ${slotHeight}px`,
               aspectRatio: aspectRatio.toFixed(3),
-              orientation: 'landscape (FORCED)',
+              expected: '1.333',
+              match: Math.abs(aspectRatio - 1.333) < 0.01 ? '✅' : '❌',
             });
 
             return {
@@ -132,39 +138,23 @@ export async function createPhotoStripWithFrame(
             };
           });
         } else {
-          // Fallback: Default 3 equal vertical slots
+          // Fallback: Default equal vertical slots
           console.warn('⚠️ No photo_slots found, using default layout');
           const sidePadding = Math.floor(frameWidth * 0.08);
           const verticalPadding = Math.floor(frameHeight * 0.06);
           const gap = Math.floor(frameHeight * 0.03);
           
           const photoWidth = frameWidth - (sidePadding * 2);
-          const availableHeight = frameHeight - (verticalPadding * 2) - (gap * 2);
-          const photoHeight = Math.floor(availableHeight / 3);
+          const availableHeight = frameHeight - (verticalPadding * 2) - (gap * (photos.length - 1));
+          const photoHeight = Math.floor(availableHeight / photos.length);
 
-          slots = [
-            { 
-              x: sidePadding, 
-              y: verticalPadding, 
-              width: photoWidth, 
-              height: photoHeight,
-              aspectRatio: photoWidth / photoHeight,
-            },
-            { 
-              x: sidePadding, 
-              y: verticalPadding + photoHeight + gap, 
-              width: photoWidth, 
-              height: photoHeight,
-              aspectRatio: photoWidth / photoHeight,
-            },
-            { 
-              x: sidePadding, 
-              y: verticalPadding + (photoHeight * 2) + (gap * 2), 
-              width: photoWidth, 
-              height: photoHeight,
-              aspectRatio: photoWidth / photoHeight,
-            },
-          ];
+          slots = photos.map((_, i) => ({
+            x: sidePadding, 
+            y: verticalPadding + i * (photoHeight + gap), 
+            width: photoWidth, 
+            height: photoHeight,
+            aspectRatio: photoWidth / photoHeight,
+          }));
         }
 
         // Fill background
@@ -255,11 +245,11 @@ export async function createPhotoStripWithFrame(
           });
         };
 
-        // Draw all 3 photos sequentially
+        // Draw all photos sequentially
         try {
-          await loadAndDrawPhoto(photos[0], slots[0], 1);
-          await loadAndDrawPhoto(photos[1], slots[1], 2);
-          await loadAndDrawPhoto(photos[2], slots[2], 3);
+          for (let i = 0; i < photos.length; i++) {
+            await loadAndDrawPhoto(photos[i], slots[i], i + 1);
+          }
 
           // Draw frame overlay on top
           ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
