@@ -70,7 +70,7 @@ export async function createPhotoStripWithFrame(
 ): Promise<string> {
   return new Promise(async (resolve, reject) => {
     try {
-      if (photos.length < 1) {
+      if (photos.length === 0) {
         reject(new Error('At least 1 photo required'));
         return;
       }

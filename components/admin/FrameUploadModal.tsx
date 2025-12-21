@@ -268,6 +268,10 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
     if (!containerRef.current || dragging === null) return;
 
     const container = containerRef.current.getBoundingClientRect();
+    
+    // Validate container dimensions to prevent division by zero
+    if (container.width === 0 || container.height === 0) return;
+    
     const deltaX = ((e.clientX - dragStart.x) / container.width) * 100;
     const deltaY = ((e.clientY - dragStart.y) / container.height) * 100;
 

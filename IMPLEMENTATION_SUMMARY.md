@@ -37,7 +37,7 @@ This implementation locks photo slot sizes to a fixed 4:3 landscape aspect ratio
 
 ### 3. `components/camera/CameraPreview.tsx` - Dynamic Dimension Calculation
 **Key Changes:**
-- ✅ Added `SLOT_SIZE_BY_COUNT` constant matching `FIXED_SLOT_SIZES`
+- ✅ Imported `FIXED_SLOT_SIZES` constant from `lib/framePresets.ts`
 - ✅ Updated `currentSlot` calculation to use dynamic slot sizes based on `photo_count`
 - ✅ Default slots now use 4:3 aspect ratio (60% × 45%) instead of 1.5 ratio (37.5% × 25%)
 - ✅ Bounding box calculation now uses correct 4:3 aspect ratio from slot config
@@ -50,7 +50,7 @@ This implementation locks photo slot sizes to a fixed 4:3 landscape aspect ratio
 ### 4. `lib/imageProcessing.ts` - Dynamic Composite Generation
 **Key Changes:**
 - ✅ Added `photoCount` parameter to `createPhotoStripWithFrame()`
-- ✅ Added `SLOT_SIZE_BY_COUNT` constant for dynamic dimension calculation
+- ✅ Imported `FIXED_SLOT_SIZES` constant from `lib/framePresets.ts`
 - ✅ Modified slot calculation to derive dimensions from `photo_count` instead of stored width/height
 - ✅ Updated to support 1-4 photos (previously limited to exactly 3)
 - ✅ Enhanced logging to show aspect ratio validation
