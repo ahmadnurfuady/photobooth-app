@@ -1,5 +1,6 @@
 // lib/imageProcessing.ts
 import type { PhotoSlot } from '@/types';
+import { FIXED_SLOT_SIZES } from './framePresets';
 
 /**
  * Apply frame overlay to photo using Canvas API
@@ -82,14 +83,6 @@ export async function createPhotoStripWithFrame(
         return;
       }
 
-      // Fixed slot sizes based on photo count (% of frame) - 4:3 aspect ratio
-      const SLOT_SIZE_BY_COUNT: Record<number, { widthPercent: number; heightPercent: number }> = {
-        1: { widthPercent: 70, heightPercent: 52.5 },  // 4:3 ratio
-        2: { widthPercent: 65, heightPercent: 48.75 },
-        3: { widthPercent: 60, heightPercent: 45 },
-        4: { widthPercent: 55, heightPercent: 41.25 },
-      };
-
       // Load frame first
       const frameImg = new Image();
       frameImg.crossOrigin = 'anonymous';
@@ -116,15 +109,15 @@ export async function createPhotoStripWithFrame(
         if (photoSlots && photoSlots.length >= 1) {
           // ✅ Calculate dimensions from photo_count (FIXED 4:3 ratio)
           const actualPhotoCount = photoCount || photos.length;
-          const slotSizeConfig = SLOT_SIZE_BY_COUNT[actualPhotoCount as keyof typeof SLOT_SIZE_BY_COUNT] || SLOT_SIZE_BY_COUNT[3];
+          const slotSizeConfig = FIXED_SLOT_SIZES[actualPhotoCount as keyof typeof FIXED_SLOT_SIZES] || FIXED_SLOT_SIZES[3];
           
           slots = photoSlots.slice(0, photos.length).map((s, index) => {
             const slotX = Math.round((s.x / 100) * frameWidth);
             const slotY = Math.round((s.y / 100) * frameHeight);
             
             // ✅ Calculate dimensions from photo count (FIXED 4:3 ratio)
-            const slotWidth = Math.round((slotSizeConfig.widthPercent / 100) * frameWidth);
-            const slotHeight = Math.round((slotSizeConfig.heightPercent / 100) * frameHeight);
+            const slotWidth = Math.round((slotSizeConfig.width / 100) * frameWidth);
+            const slotHeight = Math.round((slotSizeConfig.height / 100) * frameHeight);
             const aspectRatio = slotWidth / slotHeight; // Should be ~1.333
 
             console.log(`📍 Slot ${index + 1} (from photo_count=${actualPhotoCount}):`, {

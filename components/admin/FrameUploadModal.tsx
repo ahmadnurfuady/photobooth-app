@@ -265,10 +265,10 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (! containerRef.current || dragging === null) return;
+    if (!containerRef.current || dragging === null) return;
 
-    const container = containerRef.current. getBoundingClientRect();
-    const deltaX = ((e.clientX - dragStart. x) / container.width) * 100;
+    const container = containerRef.current.getBoundingClientRect();
+    const deltaX = ((e.clientX - dragStart.x) / container.width) * 100;
     const deltaY = ((e.clientY - dragStart.y) / container.height) * 100;
 
     // Dragging (position change only) - size remains FIXED
@@ -280,10 +280,10 @@ export const FrameUploadModal:  React.FC<FrameUploadModalProps> = ({
               x: Math.max(0, Math.min(100 - slot.width, slot.x + deltaX)),
               y: Math.max(0, Math.min(100 - slot.height, slot.y + deltaY)),
             }
-          :  slot
+          : slot
       )
     );
-    setDragStart({ x: e.clientX, y: e. clientY });
+    setDragStart({ x: e.clientX, y: e.clientY });
   };
 
   const handleMouseUp = () => {

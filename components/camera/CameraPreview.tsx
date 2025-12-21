@@ -5,6 +5,7 @@ import React, { useRef, useState, useCallback, useMemo, useEffect } from 'react'
 import Webcam from 'react-webcam';
 import { Button } from '@/components/ui/Button';
 import { Frame, PhotoSlot } from '@/types';
+import { FIXED_SLOT_SIZES } from '@/lib/framePresets';
 
 export interface CameraPreviewProps {
   onCapture: (imageSrc: string) => void;
@@ -45,14 +46,6 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
   // Target bounding box size (adjust to make bigger/smaller)
   const TARGET_BOX_SIZE = 450;
 
-  // Fixed slot sizes based on photo count (% of frame) - 4:3 aspect ratio
-  const SLOT_SIZE_BY_COUNT: Record<number, { widthPercent: number; heightPercent: number }> = {
-    1: { widthPercent: 70, heightPercent: 52.5 },  // 4:3 ratio
-    2: { widthPercent: 65, heightPercent: 48.75 },
-    3: { widthPercent: 60, heightPercent: 45 },
-    4: { widthPercent: 55, heightPercent: 41.25 },
-  };
-
   // Load frame dimensions from image
   useEffect(() => {
     const img = new Image();
@@ -73,9 +66,9 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
     // Generate default slots based on frame_config if available
     if (frame.frame_config) {
       const { photo_count } = frame.frame_config;
-      const slotSizeConfig = SLOT_SIZE_BY_COUNT[photo_count] || SLOT_SIZE_BY_COUNT[3];
-      const slotWidth = slotSizeConfig.widthPercent;
-      const slotHeight = slotSizeConfig.heightPercent;
+      const slotSizeConfig = FIXED_SLOT_SIZES[photo_count as keyof typeof FIXED_SLOT_SIZES] || FIXED_SLOT_SIZES[3];
+      const slotWidth = slotSizeConfig.width;
+      const slotHeight = slotSizeConfig.height;
       const gap = 5;
       const defaultSlots: PhotoSlot[] = [];
       
@@ -98,7 +91,7 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
       { id: 3, x: 20, y: 70, width: 60, height: 45 },
     ];
     return defaultSlots[photoNumber - 1] || null;
-  }, [frame.photo_slots, frame.frame_config, photoNumber, SLOT_SIZE_BY_COUNT]);
+  }, [frame.photo_slots, frame.frame_config, photoNumber]);
 
   // Calculate centered bounding box with CORRECT aspect ratio from admin slot
   const boundingBox = useMemo(() => {
