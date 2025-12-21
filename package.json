@@ -13,6 +13,7 @@
     "cloudinary": "^2.8.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "file-saver": "^2.0.5",
     "firebase": "^12.7.0",
     "gifshot": "^0.4.5",
     "jszip": "^3.10.1",
@@ -27,6 +28,7 @@
     "zustand": "^5.0.9"
   },
   "devDependencies": {
+    "@types/file-saver": "^2.0.7",
     "@types/jszip": "^3.4.0",
     "@types/node": "^25.0.3",
     "@types/react": "^19.2.7",

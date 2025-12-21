@@ -4,10 +4,12 @@ import { sessionQueries } from '@/lib/supabase';
 import { uploadToCloudinary } from '@/lib/cloudinary';
 import { v4 as uuidv4 } from 'uuid';
 
+// POST /api/sessions - Create new photo session
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const {
+      id, // ✅ TERIMA ID DARI FRONTEND (Agar QR Code Match)
       frame_id,
       photos, // Array of base64 images
       composite_photo, // Photo strip with frame
@@ -18,6 +20,7 @@ export async function POST(request: NextRequest) {
     // Backend mewajibkan semua data ini ada.
     if (!frame_id || !photos || !composite_photo || !gif) {
       console.error("❌ [API] Missing Fields:", { 
+        hasId: !!id,
         hasFrame: !!frame_id, 
         photosLen: photos?.length, 
         hasComposite: !!composite_photo, 
@@ -29,7 +32,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const sessionId = uuidv4();
+    // ✅ GUNAKAN ID DARI FRONTEND JIKA ADA, KALAU TIDAK ADA BARU GENERATE
+    const sessionId = id || uuidv4();
     const timestamp = Date.now();
 
     console.log(`🚀 Starting processing for session: ${sessionId}`);
@@ -95,8 +99,10 @@ export async function POST(request: NextRequest) {
     }
 
     // 5. Save session to Supabase
-    // Pastikan sessionQueries.create sesuai dengan tabel Anda
+    // Pastikan sessionQueries.create di lib/supabase Anda mendukung property 'id'
+    // Jika menggunakan supabase-js standard insert, ini akan bekerja.
     const { data, error } = await sessionQueries.create({
+      id: sessionId, // ✅ Insert ID spesifik agar QR Code valid
       frame_id,
       photos: uploadedPhotos, // Simpan array JSON URL foto
       composite_url: compositeResult.secure_url,
@@ -121,7 +127,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        session_id: data?.id, // Handle if data is null (though insert returns data)
+        session_id: sessionId, // Mengembalikan ID yang konsisten
         ...data,
       },
       message: 'Session created successfully',

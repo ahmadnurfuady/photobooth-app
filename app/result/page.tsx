@@ -9,35 +9,71 @@ import { QRCodeCanvas } from 'qrcode.react';
 import toast from 'react-hot-toast';
 import Image from 'next/image';
 
-// Import fungsi dari library kamu (jika ada)
-// Kita bungkus dalam try-catch nanti, kalau error kita pakai fallback manual di file ini
+// Import library pemrosesan gambar Anda
+// (Fungsi ini akan dijalankan, jika gagal akan masuk ke fallback)
 import {
   createPhotoStripWithFrame,
   generateGIF,
   downloadBase64Image,
 } from '@/lib/imageProcessing';
 
+// Helper: Generate ID unik di client (untuk QR Code instan)
+// app/result/page.tsx
+
+// ... imports tetap sama ...
+
+// ✅ PERBAIKAN: Generator UUID v4 Asli (Native Browser)
+// Ini menghasilkan format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+// yang diterima oleh kolom UUID di Supabase.
+const generateSessionId = () => {
+  // Cara 1: Gunakan API modern browser (paling cepat & aman)
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  
+  // Cara 2: Fallback manual untuk browser lama (UUID v4 compatible)
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
+
 export default function ResultPage() {
   const router = useRouter();
   
-  // State UI
-  const [processing, setProcessing] = useState(true);
-  const [progress, setProgress] = useState(0);
+  // --- STATE UI ---
+  // Status proses: 'initializing' -> 'processing' -> 'uploading' -> 'complete' | 'error'
+  const [status, setStatus] = useState<'initializing' | 'processing' | 'uploading' | 'complete' | 'error'>('initializing');
   const [progressMessage, setProgressMessage] = useState('Initializing...');
 
-  // State Data
+  // --- STATE DATA ---
+  const [sessionId, setSessionId] = useState<string>(''); // ID sesi (dibuat di awal)
+  const [downloadUrl, setDownloadUrl] = useState<string>(''); // URL download (dibuat di awal)
   const [selectedFrame, setSelectedFrame] = useState<Frame | null>(null);
   const [capturedPhotos, setCapturedPhotos] = useState<string[]>([]);
+  
+  // Hasil Generate (Awalnya null, akan terisi setelah proses selesai)
   const [compositePhoto, setCompositePhoto] = useState<string | null>(null);
   const [gifUrl, setGifUrl] = useState<string | null>(null);
   const [session, setSession] = useState<PhotoSession | null>(null);
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
+  // 1. INIT ON MOUNT: Generate ID & Tampilkan Halaman LANGSUNG
   useEffect(() => {
-    loadAndProcessPhotos();
+    // A. Generate ID Unik detik ini juga
+    const newId = generateSessionId();
+    setSessionId(newId);
+    
+    // B. Buat URL Download (Deterministic URL)
+    // URL ini bisa dibuka user meskipun data belum masuk database (Logic "Waiting Room")
+    const appUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    setDownloadUrl(`${appUrl}/download/${newId}`);
+
+    // C. Load Data & Mulai Background Process
+    loadAndStartBackgroundProcess(newId);
   }, []);
 
-  const loadAndProcessPhotos = async () => {
+  const loadAndStartBackgroundProcess = async (currentSessionId: string) => {
     try {
       const frameData = sessionStorage.getItem('selectedFrame');
       const photosData = sessionStorage.getItem('capturedPhotos');
@@ -53,27 +89,28 @@ export default function ResultPage() {
 
       setSelectedFrame(frame);
       setCapturedPhotos(photos);
-
-      // Mulai Proses Utama
-      await processAllPhotos(frame, photos);
+      
+      // Update status: UI tampil, sekarang mulai proses berat di background
+      setStatus('processing');
+      setProgressMessage('Designing your photo strip... 🎨');
+      
+      // --- MULAI PARALLEL PROCESSING ---
+      await processAllPhotos(frame, photos, currentSessionId);
 
     } catch (error) {
       console.error('Error loading data:', error);
-      toast.error('Failed to load session');
-      router.push('/camera');
+      setStatus('error');
+      setProgressMessage('Failed to load data.');
     }
   };
 
-  const processAllPhotos = async (frame: Frame, photos: string[]) => {
+  const processAllPhotos = async (frame: Frame, photos: string[], currentSessionId: string) => {
     try {
-      // --- STEP 1: COMPOSITE PHOTO (STRIP) ---
-      setProgress(20);
-      setProgressMessage('Designing your photo strip... 🎨');
-      
+      // --- STEP 1: COMPOSITE PHOTO (Local Processing) ---
+      // User sudah bisa lihat QR Code, tapi Preview gambar masih loading
       let finalComposite: string | null = null;
-
       try {
-        // Coba pakai library kamu dulu
+        // Coba pakai library utama Anda
         finalComposite = await createPhotoStripWithFrame(
           photos,
           frame.cloudinary_url,
@@ -81,37 +118,33 @@ export default function ResultPage() {
           frame.frame_config?.photo_count || photos.length
         );
       } catch (libError) {
-        console.warn("Library composite failed, using fallback canvas...", libError);
-        // Fallback: Generate manual pakai Canvas jika fungsi di atas error
+        console.warn("Library composite failed, using fallback...", libError);
+        // Fallback: Generate manual pakai Canvas (agar tidak crash)
         finalComposite = await generateCompositeFallback(photos, frame);
       }
-
-      if (!finalComposite) throw new Error("Failed to generate photo strip");
-      setCompositePhoto(finalComposite);
-
-      // --- STEP 2: GIF ANIMATION ---
-      setProgress(50);
-      setProgressMessage('Animating your moments... ✨');
       
-      let finalGif: string | null = null;
+      if (!finalComposite) throw new Error("Failed to generate photo strip");
+      setCompositePhoto(finalComposite); // Preview Strip Muncul!
 
+      // --- STEP 2: GIF ANIMATION (Local Processing) ---
+      setProgressMessage('Creating animation... ✨');
+      let finalGif: string | null = null;
       try {
-        // Coba pakai library generateGIF kamu
+        // Coba pakai library generateGIF utama
         finalGif = await generateGIF(photos);
       } catch (gifError) {
         console.warn("GIF generation failed, using static fallback...", gifError);
-        // Fallback: Gunakan dummy base64 GIF transparan agar backend tidak menolak request
-        // (Atau bisa duplikat foto pertama dengan header GIF jika mau)
+        // Fallback dummy GIF (1x1 pixel transparan) agar backend tidak reject
         finalGif = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
       }
-
       setGifUrl(finalGif);
 
-      // --- STEP 3: UPLOAD TO SERVER ---
-      setProgress(80);
-      setProgressMessage('Saving memory to cloud... ☁️');
-
+      // --- STEP 3: UPLOAD TO SERVER (Background Upload) ---
+      setStatus('uploading');
+      setProgressMessage('Syncing to cloud... ☁️');
+      
       const payload = {
+        id: currentSessionId, // ✅ KIRIM ID YANG SUDAH KITA GENERATE (PENTING!)
         frame_id: frame.id,
         photos: photos,            // Array Foto Original
         composite_photo: finalComposite, // Strip Foto yang sudah jadi
@@ -124,45 +157,34 @@ export default function ResultPage() {
         body: JSON.stringify(payload),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Server Error (${response.status})`);
-      }
-
       const responseData = await response.json();
-      
-      if (!responseData.success || !responseData.data) {
-        throw new Error('Invalid response structure from server');
+
+      if (!response.ok) {
+        throw new Error(responseData.error || `Server Error (${response.status})`);
       }
 
       setSession(responseData.data);
 
-      // --- STEP 4: FINALIZE ---
-      setProgress(100);
-      setProgressMessage('Ready! 🎉');
+      // --- STEP 4: FINISH ---
+      setStatus('complete'); // Indikator di bawah QR berubah jadi hijau
+      setProgressMessage('Ready!');
+      toast.success('Upload complete! Your photos are safe.');
       
-      // Generate Download Link (Client Side URL)
-      const appUrl = typeof window !== 'undefined' ? window.location.origin : '';
-      setDownloadUrl(`${appUrl}/download/${responseData.data.id}`);
-
-      // Clear Session Storage agar bersih
+      // Bersihkan Storage agar sesi baru bersih
       sessionStorage.removeItem('selectedFrame');
       sessionStorage.removeItem('capturedPhotos');
 
-      setTimeout(() => {
-        setProcessing(false);
-        toast.success('Session saved successfully!');
-      }, 800);
-
     } catch (error: any) {
       console.error('Processing Error:', error);
-      toast.error(error.message || 'Failed to process photos');
-      setProcessing(false); // Stop loading even on error so user can see what happened
+      toast.error(`Upload failed: ${error.message}`);
+      // Tetap biarkan user download manual lewat tombol jika upload gagal
+      setStatus('error');
+      setProgressMessage('Upload failed (Saved Locally)');
     }
   };
 
   // --- FALLBACK FUNCTION: Manual Canvas Composite ---
-  // (Digunakan jika createPhotoStripWithFrame dari library gagal/error)
+  // Digunakan HANYA JIKA createPhotoStripWithFrame dari library gagal/error
   const generateCompositeFallback = async (photos: string[], frame: Frame): Promise<string> => {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement('canvas');
@@ -178,28 +200,25 @@ export default function ResultPage() {
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-      const frameImg = new window.Image(); // Pakai window.Image explicit
+      const frameImg = new window.Image();
       frameImg.crossOrigin = "anonymous";
       frameImg.src = frame.cloudinary_url;
 
       frameImg.onload = async () => {
-        // Simple logic: Stack photos vertically
-        const photoHeight = 300; 
-        const margin = 20;
-        
-        // Helper load image
+        // Helper load image async
         const loadImg = (src: string) => new Promise<HTMLImageElement>((r) => { 
             const i = new window.Image(); i.onload = () => r(i); i.src = src; 
         });
 
+        // Loop foto (maksimal 4) dan gambar di canvas
         for (let i = 0; i < photos.length; i++) {
-            if (i >= 4) break; // Limit 4 photos
+            if (i >= 4) break;
             const pImg = await loadImg(photos[i]);
-            // Draw di tengah
-            ctx.drawImage(pImg, 50, 50 + (i * (photoHeight + margin)), 500, photoHeight);
+            // Posisi hardcoded sederhana (tengah vertikal)
+            ctx.drawImage(pImg, 50, 50 + (i * 320), 500, 300);
         }
 
-        // Draw Frame di paling atas
+        // Draw Frame Overlay di paling atas
         ctx.drawImage(frameImg, 0, 0, WIDTH, HEIGHT);
         resolve(canvas.toDataURL('image/jpeg', 0.90));
       };
@@ -228,44 +247,7 @@ export default function ResultPage() {
     router.push('/camera');
   };
 
-  // --- RENDER LOADING SCREEN (DARK MODE) ---
-  if (processing) {
-    return (
-      <div className="min-h-screen w-full bg-slate-950 flex flex-col items-center justify-center p-6 relative overflow-hidden font-sans">
-        {/* Background Blobs */}
-        <div className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-[100px] pointer-events-none" />
-        <div className="absolute bottom-[-20%] left-[-10%] w-[500px] h-[500px] bg-purple-600/10 rounded-full blur-[100px] pointer-events-none" />
-
-        <div className="bg-slate-900/50 border border-slate-800 backdrop-blur-md rounded-3xl p-10 max-w-sm w-full text-center shadow-2xl z-10">
-          {/* SVG Progress Circle */}
-          <div className="relative w-32 h-32 mx-auto mb-6">
-            <svg className="w-32 h-32 transform -rotate-90">
-              <circle
-                cx="64" cy="64" r="56"
-                stroke="#1e293b" strokeWidth="8" fill="none"
-              />
-              <circle
-                cx="64" cy="64" r="56"
-                stroke="#3b82f6" strokeWidth="8" fill="none"
-                strokeDasharray={`${2 * Math.PI * 56}`}
-                strokeDashoffset={`${2 * Math.PI * 56 * (1 - progress / 100)}`}
-                strokeLinecap="round"
-                className="transition-all duration-500"
-              />
-            </svg>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-2xl font-bold text-white">{progress}%</span>
-            </div>
-          </div>
-
-          <h2 className="text-xl font-bold text-white mb-2 animate-pulse">Processing...</h2>
-          <p className="text-slate-400 text-sm">{progressMessage}</p>
-        </div>
-      </div>
-    );
-  }
-
-  // --- RENDER RESULT PAGE (PREMIUM DARK UI) ---
+  // --- RENDER UI (LANGSUNG TAMPIL TANPA LOADING SCREEN) ---
   return (
     <div className="min-h-screen w-full bg-slate-950 relative overflow-y-auto font-sans text-slate-100 p-4 md:p-8">
       
@@ -278,16 +260,13 @@ export default function ResultPage() {
       <div className="max-w-6xl mx-auto relative z-10">
         
         {/* Header */}
-        <div className="text-center mb-10">
-          <div className="inline-block px-4 py-1.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-semibold uppercase tracking-wider mb-4 animate-in fade-in slide-in-from-top-4">
-            Session Complete
+        <div className="text-center mb-8">
+          <div className="inline-block px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-semibold uppercase tracking-wider mb-4">
+            Session ID: {sessionId ? sessionId.slice(-6) : '...'}
           </div>
-          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight mb-4 bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-slate-400">
-            Your Photos Are Ready! 🎉
+          <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight mb-4 bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-slate-400">
+            Scan Now, Download Fast! 🚀
           </h1>
-          <p className="text-slate-400 max-w-lg mx-auto">
-            Scan the QR code to download instantly or save the photo strip below.
-          </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -299,16 +278,18 @@ export default function ResultPage() {
             <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-6 backdrop-blur-md shadow-2xl">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <span>📸</span> The Result
+                  <span>📸</span> Your Result
                 </h3>
-                <Button variant="primary" size="sm" onClick={handleDownloadComposite} className="bg-blue-600 hover:bg-blue-700 border-none">
-                  Download Strip
-                </Button>
+                {compositePhoto && (
+                  <Button variant="primary" size="sm" onClick={handleDownloadComposite} className="bg-blue-600 hover:bg-blue-700 border-none">
+                    Download File
+                  </Button>
+                )}
               </div>
               
-              {compositePhoto ? (
-                <div className="w-full bg-slate-950/50 rounded-xl overflow-hidden border border-slate-800/50 p-4 flex justify-center">
-                  <div className="relative w-full max-w-sm aspect-[3/5] shadow-2xl">
+              <div className="w-full bg-slate-950/50 rounded-xl overflow-hidden border border-slate-800/50 p-4 flex justify-center min-h-[300px]">
+                {compositePhoto ? (
+                  <div className="relative w-full max-w-sm aspect-[3/5] shadow-2xl animate-in zoom-in duration-500">
                     <Image
                       src={compositePhoto}
                       alt="Photo Strip"
@@ -317,12 +298,14 @@ export default function ResultPage() {
                       unoptimized
                     />
                   </div>
-                </div>
-              ) : (
-                <div className="h-64 flex items-center justify-center text-slate-500 bg-slate-950/30 rounded-xl border border-dashed border-slate-800">
-                  Preview not available
-                </div>
-              )}
+                ) : (
+                  // SKELETON LOADING UNTUK PREVIEW
+                  <div className="flex flex-col items-center justify-center space-y-4 text-slate-500 py-20">
+                    <div className="w-12 h-12 border-4 border-slate-700 border-t-blue-500 rounded-full animate-spin"></div>
+                    <p className="text-sm">Generating your beautiful layout...</p>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* SUB: GIF & Singles */}
@@ -330,79 +313,96 @@ export default function ResultPage() {
               {/* GIF Card */}
               <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 backdrop-blur-md">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-bold text-white text-sm flex gap-2"><span>✨</span> Animation</h3>
-                  <button onClick={handleDownloadGif} className="text-xs text-blue-400 hover:text-blue-300 font-medium">Save GIF</button>
+                  <h3 className="font-bold text-white text-sm">✨ Animation</h3>
+                  {gifUrl && <button onClick={handleDownloadGif} className="text-xs text-blue-400 hover:text-blue-300">Save GIF</button>}
                 </div>
                 {gifUrl ? (
-                   <div className="relative w-full aspect-square bg-slate-950 rounded-lg overflow-hidden border border-slate-800">
+                   <div className="relative w-full aspect-square bg-slate-950 rounded-lg overflow-hidden border border-slate-800 animate-in fade-in">
                       <Image src={gifUrl} alt="GIF" fill className="object-cover" unoptimized />
                    </div>
                 ) : (
-                   <div className="w-full aspect-square bg-slate-950 rounded-lg flex items-center justify-center text-xs text-slate-600">No GIF</div>
+                   <div className="w-full aspect-square bg-slate-950 rounded-lg flex items-center justify-center text-xs text-slate-600 animate-pulse">
+                     Creating GIF...
+                   </div>
                 )}
               </div>
 
-              {/* Singles Grid */}
+              {/* Originals */}
               <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 backdrop-blur-md">
-                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-bold text-white text-sm flex gap-2"><span>🎞️</span> Originals</h3>
-                </div>
+                <h3 className="font-bold text-white text-sm mb-3">🎞️ Original Shots</h3>
                 <div className="grid grid-cols-2 gap-2">
-                  {capturedPhotos.slice(0, 4).map((src, idx) => (
+                  {capturedPhotos.length > 0 ? capturedPhotos.slice(0, 4).map((src, idx) => (
                     <div key={idx} className="relative aspect-square rounded-md overflow-hidden bg-slate-950 border border-slate-800">
                       <Image src={src} alt={`Shot ${idx}`} fill className="object-cover" unoptimized />
                     </div>
-                  ))}
+                  )) : (
+                    <p className="text-xs text-slate-500">Loading photos...</p>
+                  )}
                 </div>
               </div>
             </div>
-
           </div>
 
-          {/* RIGHT COLUMN: ACTIONS (Span 5/12) */}
+          {/* RIGHT COLUMN: QR & ACTIONS (Span 5/12) */}
           <div className="lg:col-span-5 space-y-6">
             
-            {/* QR Code Card */}
-            <div className="bg-gradient-to-b from-slate-800 to-slate-900 rounded-3xl p-8 border border-slate-700 shadow-2xl text-center">
-              <h3 className="text-xl font-bold text-white mb-2">Scan to Download</h3>
-              <p className="text-slate-400 text-sm mb-6">Get these photos directly on your smartphone.</p>
+            {/* QR Code Card - MUNCUL INSTAN */}
+            <div className="bg-gradient-to-b from-slate-800 to-slate-900 rounded-3xl p-8 border border-slate-700 shadow-2xl text-center relative overflow-hidden">
               
-              <div className="bg-white p-4 rounded-2xl inline-block shadow-lg mb-4">
+              {/* Efek Pinggir kalau complete */}
+              {status === 'complete' && (
+                <div className="absolute inset-0 border-[3px] border-green-500/50 rounded-3xl animate-pulse pointer-events-none"></div>
+              )}
+
+              <h3 className="text-xl font-bold text-white mb-2">Scan to Download</h3>
+              <p className="text-slate-400 text-sm mb-6">Open camera on your phone</p>
+              
+              <div className="bg-white p-4 rounded-2xl inline-block shadow-lg mb-6">
                 {downloadUrl ? (
-                   <QRCodeCanvas value={downloadUrl} size={180} level="H" />
+                   <QRCodeCanvas value={downloadUrl} size={200} level="H" />
                 ) : (
-                   <div className="w-[180px] h-[180px] bg-gray-200 animate-pulse rounded" />
+                   <div className="w-[200px] h-[200px] bg-gray-200 animate-pulse rounded" />
                 )}
               </div>
               
-              <div className="flex items-center justify-center gap-2 text-xs text-slate-400 bg-slate-950/50 py-2 px-4 rounded-full inline-flex border border-slate-800">
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                Link expires in 24 hours
+              {/* STATUS INDIKATOR DI BAWAH QR CODE (DINAMIS) */}
+              <div className={`py-3 px-4 rounded-xl border flex items-center justify-center gap-3 transition-all duration-500 
+                ${status === 'complete' 
+                  ? 'bg-green-500/10 border-green-500/30 text-green-400' 
+                  : status === 'error'
+                  ? 'bg-red-500/10 border-red-500/30 text-red-400'
+                  : 'bg-blue-500/10 border-blue-500/30 text-blue-400'
+                }`}
+              >
+                {/* Ikon Status */}
+                {status === 'complete' ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                ) : status === 'error' ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                ) : (
+                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                )}
+
+                {/* Teks Status */}
+                <span className="font-semibold text-sm">
+                  {status === 'initializing' && 'Preparing session ID...'}
+                  {status === 'processing' && 'Processing photos...'}
+                  {status === 'uploading' && 'Syncing to cloud...'}
+                  {status === 'complete' && 'Upload Complete! Ready.'}
+                  {status === 'error' && 'Upload failed (Saved Locally)'}
+                </span>
               </div>
+              
+              {/* Pesan Tambahan */}
+              {status !== 'complete' && status !== 'error' && (
+                <p className="text-xs text-slate-500 mt-3 animate-pulse">
+                  You can scan now. The photos will appear on your phone automatically once processed.
+                </p>
+              )}
+
             </div>
 
-            {/* Session Info */}
-            <div className="bg-slate-900/30 border border-slate-800 rounded-2xl p-6">
-              <h4 className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-4">Session Details</h4>
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between border-b border-slate-800 pb-2">
-                  <span className="text-slate-400">Frame Style</span>
-                  <span className="text-white font-medium">{selectedFrame?.name || 'Standard'}</span>
-                </div>
-                <div className="flex justify-between border-b border-slate-800 pb-2">
-                  <span className="text-slate-400">Photos Taken</span>
-                  <span className="text-white font-medium">{session?.photo_count || capturedPhotos.length} Shots</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Date</span>
-                  <span className="text-white font-medium">
-                    {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' })}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Navigation Buttons */}
+            {/* Tombol Navigasi */}
             <div className="grid grid-cols-2 gap-4">
               <Button 
                 onClick={() => router.push('/')}
