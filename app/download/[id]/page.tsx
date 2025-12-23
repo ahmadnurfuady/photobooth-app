@@ -3,84 +3,77 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
 import { Button } from '@/components/ui/Button';
 import Image from 'next/image';
-import { PhotoSession } from '@/types';
+import { LoadingOverlay } from '@/components/ui/LoadingSpinner';
 import toast from 'react-hot-toast';
-// Import library untuk fitur ZIP
-import JSZip from 'jszip';
-import { saveAs } from 'file-saver';
+
+// Init Supabase (Client Side)
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export default function DownloadPage() {
   const params = useParams();
-  const sessionId = params?.id as string;
+  const id = params?.id as string;
 
-  const [session, setSession] = useState<PhotoSession | null>(null);
+  const [sessionData, setSessionData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [dots, setDots] = useState('');
-  // State untuk loading tombol download ZIP
-  const [zipping, setZipping] = useState(false);
+  const [currentUrl, setCurrentUrl] = useState('');
 
-  // Efek animasi titik-titik (...)
+  // Ambil URL browser saat ini untuk fitur copy link
   useEffect(() => {
-    if (!loading) return;
-    const interval = setInterval(() => {
-      setDots((prev) => (prev.length >= 3 ? '' : prev + '.'));
-    }, 500);
-    return () => clearInterval(interval);
-  }, [loading]);
+    if (typeof window !== 'undefined') {
+      setCurrentUrl(window.location.href);
+    }
+  }, []);
 
-  // LOGIKA WAITING ROOM (POLLING)
   useEffect(() => {
-    if (!sessionId) return;
-    let isMounted = true;
-    let intervalId: NodeJS.Timeout;
+    if (!id) return;
 
     const fetchSession = async () => {
       try {
-        // Pastikan nama tabel sesuai dengan di Supabase Anda ('photo_sessions' atau 'sessions')
-        const { data, error } = await supabase
-          .from('photo_sessions') 
+        const { data, error: sbError } = await supabase
+          .from('photo_sessions') // Nama tabel sesuai struktur yang Anda berikan
           .select('*')
-          .eq('id', sessionId)
-          .maybeSingle();
+          .eq('id', id)
+          .single();
 
-        if (error) {
-          console.error("❌ Supabase Error:", JSON.stringify(error, null, 2));
-          return; 
-        }
-
-        if (data) {
-          if (isMounted) {
-            // Casting data 'photos' dari JSONB ke array any agar bisa di-map
-            setSession({ ...data, photos: data.photos as any[] } as PhotoSession);
-            setLoading(false);
-            clearInterval(intervalId);
-          }
-        }
-      } catch (err) {
-        console.error("Fetch error:", err);
+        if (sbError) throw sbError;
+        
+        setSessionData(data);
+        setError(''); // Clear error jika data ditemukan
+      } catch (err: any) {
+        console.error("Error fetching session:", err);
+        // Tetap set error jika data memang belum ada di database
+        setError("Photo not yet uploaded."); 
+      } finally {
+        setLoading(false);
       }
     };
 
     fetchSession();
-    intervalId = setInterval(fetchSession, 3000);
 
-    return () => {
-      isMounted = false;
-      clearInterval(intervalId);
-    };
-  }, [sessionId]);
+    // Mekanisme Auto-Polling: Cek database setiap 10 detik jika data belum ada
+    const interval = setInterval(() => {
+      if (!sessionData) {
+        fetchSession();
+      }
+    }, 10000);
 
-  // Fungsi Download Single File
+    return () => clearInterval(interval);
+  }, [id, sessionData]);
+
+  // Fungsi Helper Download
   const handleDownload = async (url: string, filename: string) => {
     try {
-      toast.loading("Preparing download...", { id: 'dl' });
       const response = await fetch(url);
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
+      
       const link = document.createElement('a');
       link.href = blobUrl;
       link.download = filename;
@@ -88,160 +81,203 @@ export default function DownloadPage() {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(blobUrl);
-      toast.dismiss('dl');
-      toast.success("Download started!");
-    } catch (err) {
-      console.error('Download failed:', err);
-      toast.error("Download failed. Try opening link in new tab.");
+    } catch (e) {
+      alert('Download failed. Try long-pressing the image to save.');
     }
   };
 
-  // ✅ FITUR BARU: Download Semua Foto dalam ZIP
-  const handleDownloadAllZip = async () => {
-    if (!session?.photos || !Array.isArray(session.photos) || session.photos.length === 0) {
-      toast.error("No individual photos found.");
+  // --- FITUR BARU: DOWNLOAD SEMUA FOTO INDIVIDUAL SEKALIGUS ---
+  const downloadIndividualPhotos = async () => {
+    if (!sessionData?.photos || !Array.isArray(sessionData.photos)) {
+      toast.error("Photos not available");
       return;
     }
+    
+    toast.success('Downloading individual photos...');
+    
+    sessionData.photos.forEach((photo: any, index: number) => {
+      // Menggunakan timeout agar browser tidak memblokir multiple download
+      setTimeout(() => {
+        handleDownload(photo.url, `photo-original-${index + 1}.jpg`);
+      }, index * 1000);
+    });
+  };
 
-    try {
-      setZipping(true);
-      toast.loading("Creating ZIP file...", { id: 'zip' });
-      const zip = new JSZip();
-      const photoFolder = zip.folder("photos");
-
-      // Fetch semua foto secara paralel
-      const promises = session.photos.map(async (photo: any, index: number) => {
-        if (!photo.url) return;
-        const response = await fetch(photo.url);
-        const blob = await response.blob();
-        // Nama file di dalam ZIP: photo_1.jpg, photo_2.jpg, dst.
-        photoFolder?.file(`photo_${index + 1}.jpg`, blob);
-      });
-
-      await Promise.all(promises);
-
-      // Generate dan trigger download ZIP
-      const content = await zip.generateAsync({ type: "blob" });
-      saveAs(content, `photobooth-originals-${sessionId.slice(0, 8)}.zip`);
-      
-      toast.dismiss('zip');
-      toast.success("ZIP downloaded successfully!");
-    } catch (error) {
-      console.error("ZIP Error:", error);
-      toast.error("Failed to create ZIP file.");
-    } finally {
-      setZipping(false);
+  // Fungsi Copy Link
+  const handleCopyLink = () => {
+    if (currentUrl) {
+      navigator.clipboard.writeText(currentUrl);
+      toast.success('Link copied! Open it later when online.');
     }
   };
 
+  if (loading && !error) return (
+    <div 
+      className="min-h-screen flex items-center justify-center"
+      style={{ backgroundColor: 'var(--bg-color)', color: 'var(--foreground)' }}
+    >
+      <LoadingOverlay message="Looking for your photos..." />
+    </div>
+  );
 
-  // --- TAMPILAN LOADING (WAITING ROOM) ---
-  if (loading) {
+  // --- TAMPILAN JIKA ERROR / BELUM UPLOAD (OFFLINE SCENARIO) ---
+  if (error || !sessionData) {
     return (
-      <div className="h-[100dvh] w-full bg-slate-950 flex flex-col items-center justify-center p-6 text-slate-100 font-sans relative overflow-hidden">
-        <div className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-[100px] pointer-events-none" />
-        <div className="max-w-md w-full bg-slate-900/50 border border-slate-800 backdrop-blur-md rounded-3xl p-8 text-center shadow-2xl z-10">
-          <div className="w-16 h-16 mx-auto mb-6 border-4 border-slate-700 border-t-blue-500 rounded-full animate-spin"></div>
-          <h1 className="text-xl font-bold mb-2">Incoming Photos{dots}</h1>
-          <p className="text-slate-400 text-sm mb-6 leading-relaxed">
-            Please stay on this page, it will refresh automatically soon.
-          </p>
-          <div className="bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs py-2 px-4 rounded-full inline-block animate-pulse">
-            Syncing with Photobooth...
-          </div>
+      <div 
+        className="min-h-screen flex flex-col items-center justify-center p-6 text-center font-sans relative overflow-hidden"
+        style={{ backgroundColor: 'var(--bg-color)', color: 'var(--foreground)' }}
+      >
+        {/* Background Effect Samar */}
+        <div className="absolute top-[-20%] left-0 w-full h-full pointer-events-none opacity-20">
+            <div className="absolute top-[20%] left-[20%] w-[300px] h-[300px] rounded-full blur-[80px]" style={{ backgroundColor: 'var(--secondary-color)' }} />
         </div>
-      </div>
-    );
-  }
 
-  // --- TAMPILAN ERROR ---
-  if (error) {
-    return (
-      <div className="h-[100dvh] bg-slate-950 flex items-center justify-center text-white p-4">
-        <div className="text-center">
-          <h1 className="text-red-500 text-xl font-bold mb-2">Oops!</h1>
-          <p className="text-slate-400">{error}</p>
+        <div className="w-20 h-20 bg-yellow-500/10 text-yellow-500 rounded-full flex items-center justify-center mb-6 border border-yellow-500/20 animate-pulse">
+            <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
         </div>
-      </div>
-    );
-  }
-
-  // --- TAMPILAN HASIL (LAYOUT SATU LAYAR COMPACT) ---
-  return (
-    // Gunakan h-[100dvh] untuk tinggi layar penuh di mobile (dynamic viewport height)
-    // Gunakan flex flex-col untuk menata layout secara vertikal
-    <div className="h-[100dvh] w-full bg-slate-950 relative font-sans text-slate-100 p-4 flex flex-col overflow-hidden">
-      
-      {/* Background */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
-         <div className="absolute top-[-10%] left-[-10%] w-[400px] h-[400px] bg-green-600/5 rounded-full blur-[100px]" />
-      </div>
-
-      <div className="max-w-md mx-auto z-10 flex-1 flex flex-col w-full h-full">
         
-        {/* HEADER (Flex-none: Ukuran tetap) */}
-        <div className="text-center mb-2 flex-none pt-2">
-          <div className="inline-block px-3 py-0.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-[10px] font-semibold uppercase tracking-wider mb-2">
-            Ready to Save
-          </div>
-          <h1 className="text-xl font-bold tracking-tight mb-1">Here are your memories!</h1>
-          <p className="text-slate-400 text-xs">Tap buttons below to download.</p>
+        <h1 className="text-3xl font-extrabold mb-3">Photos Syncing...</h1>
+        
+        <p className="opacity-70 max-w-sm mb-8 leading-relaxed">
+          The booth is currently <strong>Offline</strong> or syncing. Your photos are safe but haven't reached the cloud yet. This page will update automatically.
+        </p>
+
+        {/* AREA COPY LINK PENTING */}
+        <div className="w-full max-w-sm bg-white/5 border border-white/10 rounded-2xl p-5 mb-6 text-left shadow-xl backdrop-blur-sm">
+            <p className="text-xs font-bold uppercase tracking-wider opacity-50 mb-2 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span>
+                Save this link
+            </p>
+            <div className="flex items-center gap-3 bg-black/30 p-3 rounded-xl border border-white/5">
+                <code className="text-xs flex-1 truncate opacity-80 select-all font-mono italic">
+                    {currentUrl || "Loading link..."}
+                </code>
+                <button 
+                    onClick={handleCopyLink}
+                    className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
+                    title="Copy Link"
+                >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
+                </button>
+            </div>
+            <p className="text-[10px] mt-3 opacity-50 italic text-center">
+                ℹ️ Copy this link now. Once the photobooth goes online, this page will show your photos.
+            </p>
         </div>
 
-        {/* MAIN CARD (Flex-1: Mengisi sisa ruang agar pas satu layar) */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-3 backdrop-blur-md shadow-2xl mb-3 flex-1 flex flex-col min-h-0">
-          
-          {/* IMAGE CONTAINER (Flex-1: Gambar menyesuaikan ruang yang ada) */}
-          {session?.composite_url && (
-            <div className="relative w-full flex-1 rounded-xl overflow-hidden bg-black/20 shadow-inner mb-3">
-               <Image 
-                 src={session.composite_url} 
-                 alt="Photo Strip" 
-                 fill 
-                 // KUNCI LAYOUT: object-contain agar gambar tidak terpotong dan pas di wadahnya
-                 className="object-contain p-1" 
-                 unoptimized 
-               />
-            </div>
-          )}
-          
-          {/* BUTTONS AREA (Flex-none: Ukuran tetap di bawah gambar) */}
-          <div className="flex-none space-y-2">
-             <Button 
-               onClick={() => session?.composite_url && handleDownload(session.composite_url, `photobooth-strip-${sessionId.slice(0,6)}.jpg`)}
-               className="w-full bg-blue-600 hover:bg-blue-700 py-5 text-sm font-bold shadow-lg shadow-blue-900/20"
-             >
-               Download Photo Strip
-             </Button>
+        <Button 
+            onClick={() => window.location.reload()} 
+            className="w-full max-w-sm py-3 border bg-transparent hover:bg-white/5 transition-all font-bold"
+            style={{ borderColor: 'var(--foreground)', color: 'var(--foreground)' }}
+        >
+            Try Refreshing Manually
+        </Button>
+      </div>
+    );
+  }
 
-             <div className="grid grid-cols-2 gap-2">
-                {session?.gif_url && (
+  // --- TAMPILAN UTAMA (JIKA FOTO ADA) ---
+  return (
+    <div 
+        className="h-screen w-full relative font-sans p-4 flex flex-col items-center justify-center overflow-hidden"
+        style={{ 
+            backgroundColor: 'var(--bg-color)', 
+            color: 'var(--foreground)' 
+        }}
+    >
+      
+      {/* Background Effects */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
+         <div 
+            className="absolute top-[-10%] left-[-10%] w-[400px] h-[400px] rounded-full blur-[100px]"
+            style={{ backgroundColor: 'var(--primary-color)', opacity: 0.15 }}
+         />
+         <div 
+            className="absolute bottom-[-10%] right-[-10%] w-[400px] h-[400px] rounded-full blur-[100px]"
+            style={{ backgroundColor: 'var(--secondary-color)', opacity: 0.15 }}
+         />
+      </div>
+
+      <div className="w-full max-w-md relative z-10 flex flex-col items-center justify-center h-full space-y-4">
+        
+        {/* Header - Ukuran disesuaikan agar tidak scroll */}
+        <div className="text-center mb-2">
+            <h1 
+                className="text-2xl md:text-3xl font-extrabold bg-clip-text text-transparent"
+                style={{ 
+                    backgroundImage: 'linear-gradient(to right, var(--foreground), rgba(255,255,255, 0.7))',
+                    color: 'var(--foreground)'
+                }}
+            >
+            Your Memories 📸
+            </h1>
+            <p className="text-xs opacity-60">Thanks for visiting!</p>
+        </div>
+
+        {/* Main Photo Card - Dibatasi tinggi visualnya (max-h) agar pas di layar */}
+        <div 
+            className="w-full bg-white/5 p-3 rounded-3xl border shadow-2xl backdrop-blur-md overflow-hidden"
+            style={{ borderColor: 'rgba(128,128,128, 0.2)' }}
+        >
+            {sessionData.composite_url ? (
+            <div className="relative w-full max-h-[50vh] aspect-[2/3] rounded-xl overflow-hidden shadow-lg bg-black/20">
+                <Image 
+                src={sessionData.composite_url} 
+                alt="Photo Strip" 
+                fill 
+                className="object-contain"
+                unoptimized
+                priority
+                />
+            </div>
+            ) : (
+            <div className="h-64 flex items-center justify-center opacity-50">
+                Photo processing...
+            </div>
+            )}
+        </div>
+
+        {/* Action Buttons - Ditambahkan Hover & Download Individual */}
+        <div className="w-full space-y-2">
+            {sessionData.composite_url && (
+            <Button 
+                onClick={() => handleDownload(sessionData.composite_url, `photobooth-${id}.jpg`)}
+                className="w-full py-3 text-white shadow-lg font-bold rounded-2xl transition-all duration-300 transform hover:scale-[1.02] hover:brightness-110 active:scale-95"
+                style={{ 
+                    backgroundColor: 'var(--primary-color)',
+                    boxShadow: '0 4px 15px -5px var(--primary-color)'
+                }}
+            >
+                Download Photo Strip
+            </Button>
+            )}
+
+            <div className="grid grid-cols-2 gap-2">
+                {sessionData.gif_url && (
                 <Button 
-                    variant="secondary"
-                    onClick={() => session?.gif_url && handleDownload(session.gif_url, `photobooth-gif-${sessionId.slice(0,6)}.gif`)}
-                    className="w-full bg-slate-800 hover:bg-slate-700 py-3 text-xs border border-slate-700"
+                    onClick={() => handleDownload(sessionData.gif_url, `photobooth-${id}.gif`)}
+                    className="w-full py-3 text-white shadow-lg font-bold rounded-2xl transition-all duration-300 transform hover:scale-[1.02] hover:brightness-110 active:scale-95 text-xs"
+                    style={{ 
+                        background: 'linear-gradient(to right, var(--primary-color), var(--secondary-color))',
+                        opacity: 0.9
+                    }}
                 >
                     Download GIF
                 </Button>
                 )}
-                {/* ✅ TOMBOL BARU: Download ZIP */}
-                {session?.photos && (
+
                 <Button 
-                    variant="secondary"
-                    onClick={handleDownloadAllZip}
-                    disabled={zipping}
-                    className="w-full bg-slate-800 hover:bg-slate-700 py-3 text-xs border border-slate-700 truncate"
+                    onClick={downloadIndividualPhotos}
+                    className="w-full py-3 bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold rounded-2xl transition-all duration-300 transform hover:scale-[1.02] active:scale-95 text-xs shadow-md"
+                    style={{ color: 'var(--foreground)' }}
                 >
-                    {zipping ? 'Zipping...' : 'Download All (ZIP)'}
+                    Download All
                 </Button>
-                )}
-             </div>
-          </div>
+            </div>
         </div>
 
-        {/* FOOTER (Flex-none: Ukuran tetap di paling bawah) */}
-        <p className="text-center text-[10px] text-slate-600 flex-none pb-2">
-           ID: {sessionId.slice(-8)} • Expires in 24h
+        <p className="text-[10px] opacity-40 mt-2 text-center">
+            Press and hold image to save manually if download fails.
         </p>
 
       </div>

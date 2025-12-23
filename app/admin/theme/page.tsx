@@ -1,20 +1,85 @@
+// app/admin/theme/page.tsx
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import toast from 'react-hot-toast';
 
+// --- 1. DEFINISI PRESET TEMA ---
+const THEME_PRESETS = [
+  {
+    id: 'custom',
+    name: '🎨 Custom (Manual)',
+    colors: null, // User atur sendiri
+  },
+  {
+    id: 'midnight',
+    name: '🌙 Midnight Blue (Default)',
+    colors: {
+      primary_color: '#3b82f6',    // Blue-500
+      secondary_color: '#a855f7',  // Purple-500
+      background_color: '#0f172a', // Slate-950
+      text_color: '#f8fafc',       // Slate-50
+    },
+  },
+  {
+    id: 'cupcake',
+    name: '🌸 Sweet Cupcake',
+    colors: {
+      primary_color: '#ec4899',    // Pink-500
+      secondary_color: '#f472b6',  // Pink-400
+      background_color: '#fff1f2', // Rose-50 (Terang)
+      text_color: '#881337',       // Rose-900
+    },
+  },
+  {
+    id: 'forest',
+    name: '🌲 Deep Forest',
+    colors: {
+      primary_color: '#22c55e',    // Green-500
+      secondary_color: '#15803d',  // Green-700
+      background_color: '#052e16', // Green-950
+      text_color: '#dcfce7',       // Green-100
+    },
+  },
+  {
+    id: 'cyberpunk',
+    name: '⚡ Cyberpunk Neon',
+    colors: {
+      primary_color: '#facc15',    // Yellow-400
+      secondary_color: '#06b6d4',  // Cyan-500
+      background_color: '#18181b', // Zinc-950
+      text_color: '#e4e4e7',       // Zinc-200
+    },
+  },
+  {
+    id: 'minimalist',
+    name: '☕ Warm Minimalist',
+    colors: {
+      primary_color: '#d97706',    // Amber-600
+      secondary_color: '#78350f',  // Amber-900
+      background_color: '#fffbeb', // Amber-50 (Terang)
+      text_color: '#451a03',       // Amber-950
+    },
+  },
+];
+
 export default function ThemeSettingsPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // State Tema (Default Values)
+  // State Pilihan Dropdown
+  const [selectedPresetId, setSelectedPresetId] = useState('custom');
+
+  // State Config Warna
   const [config, setConfig] = useState({
     site_title: 'Photobooth Event',
-    primary_color: '#3b82f6', // Blue-500
-    secondary_color: '#a855f7', // Purple-500
-    background_color: '#0f172a', // Slate-950
-    text_color: '#f8fafc', // Slate-50
+    primary_color: '#3b82f6',
+    secondary_color: '#a855f7',
+    background_color: '#0f172a',
+    text_color: '#f8fafc',
   });
 
   // Load Initial Data
@@ -23,19 +88,56 @@ export default function ThemeSettingsPage() {
       .then(res => res.json())
       .then(data => {
         if (data && !data.error) {
-          setConfig({
+          const loadedConfig = {
             site_title: data.site_title || 'Photobooth Event',
             primary_color: data.primary_color || '#3b82f6',
             secondary_color: data.secondary_color || '#a855f7',
             background_color: data.background_color || '#0f172a',
             text_color: data.text_color || '#f8fafc',
-          });
+          };
+          setConfig(loadedConfig);
+
+          // Coba deteksi apakah warna saat ini cocok dengan salah satu preset?
+          const matchedPreset = THEME_PRESETS.find(p => 
+            p.colors &&
+            p.colors.primary_color === loadedConfig.primary_color &&
+            p.colors.background_color === loadedConfig.background_color
+          );
+          
+          if (matchedPreset) {
+            setSelectedPresetId(matchedPreset.id);
+          } else {
+            setSelectedPresetId('custom');
+          }
         }
         setLoading(false);
       });
   }, []);
 
-  // Handle Save
+  // --- LOGIC GANTI PRESET ---
+  const handlePresetChange = (presetId: string) => {
+    setSelectedPresetId(presetId);
+
+    const preset = THEME_PRESETS.find(p => p.id === presetId);
+    if (preset && preset.colors) {
+      // Jika pilih preset, timpa warna config dengan warna preset
+      setConfig(prev => ({
+        ...prev,
+        ...preset.colors
+      }));
+      toast.success(`Theme switched to ${preset.name}`);
+    }
+  };
+
+  // Helper Input Change (Manual Edit)
+  const handleChange = (key: string, value: string) => {
+    setConfig(prev => ({ ...prev, [key]: value }));
+    // Jika user ubah manual, otomatis set dropdown ke 'Custom'
+    if (key.includes('_color')) {
+      setSelectedPresetId('custom');
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -53,11 +155,6 @@ export default function ThemeSettingsPage() {
     }
   };
 
-  // Helper Input Change
-  const handleChange = (key: string, value: string) => {
-    setConfig(prev => ({ ...prev, [key]: value }));
-  };
-
   if (loading) return <div className="p-10 text-white">Loading config...</div>;
 
   return (
@@ -67,7 +164,16 @@ export default function ThemeSettingsPage() {
         
         {/* --- KOLOM KIRI: KONTROL EDITOR --- */}
         <div className="space-y-8">
+          
           <div>
+            <button 
+              onClick={() => router.push('/admin/dashboard')}
+              className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors mb-6 text-sm font-medium group"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:-translate-x-1 transition-transform"><path d="m15 18-6-6 6-6"/></svg>
+              Back to Dashboard
+            </button>
+
             <h1 className="text-3xl font-bold mb-2">Theme Editor</h1>
             <p className="text-slate-400">Customize the look and feel of your photobooth.</p>
           </div>
@@ -85,15 +191,36 @@ export default function ThemeSettingsPage() {
               />
             </div>
 
-            {/* Colors Grid */}
-            <div className="grid grid-cols-2 gap-4">
+            <hr className="border-slate-700 my-4" />
+
+            {/* --- DROPDOWN PRESET TEMA --- */}
+            <div>
+              <label className="block text-sm font-bold mb-2 text-white">Choose a Preset Theme</label>
+              <select
+                value={selectedPresetId}
+                onChange={(e) => handlePresetChange(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer hover:bg-slate-800 transition-colors"
+              >
+                {THEME_PRESETS.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-500 mt-2">
+                Selecting a preset will automatically update the colors below. You can still tweak them manually.
+              </p>
+            </div>
+
+            {/* Colors Grid (Akan berubah otomatis jika preset dipilih) */}
+            <div className="grid grid-cols-2 gap-4 mt-4">
               <ColorInput label="Primary Color" value={config.primary_color} onChange={(v) => handleChange('primary_color', v)} />
               <ColorInput label="Secondary Color" value={config.secondary_color} onChange={(v) => handleChange('secondary_color', v)} />
               <ColorInput label="Background Color" value={config.background_color} onChange={(v) => handleChange('background_color', v)} />
               <ColorInput label="Text Color" value={config.text_color} onChange={(v) => handleChange('text_color', v)} />
             </div>
 
-            <div className="pt-4 border-t border-slate-700">
+            <div className="pt-4 border-t border-slate-700 mt-4">
               <Button 
                 onClick={handleSave} 
                 disabled={saving}
@@ -109,35 +236,30 @@ export default function ThemeSettingsPage() {
         {/* --- KOLOM KANAN: LIVE PREVIEW (PHONE MOCKUP) --- */}
         <div className="flex items-center justify-center bg-slate-800/20 rounded-3xl border border-slate-800 p-8">
           
-          {/* MOCKUP HP */}
           <div className="relative w-[320px] h-[640px] bg-black rounded-[40px] border-[8px] border-slate-900 shadow-2xl overflow-hidden flex flex-col">
             
-            {/* Dynamic Styles Injection for Preview */}
             <div 
-              className="flex-1 flex flex-col p-6 relative overflow-y-auto transition-colors duration-300"
+              className="flex-1 flex flex-col p-6 relative overflow-y-auto transition-colors duration-500"
               style={{
                 backgroundColor: config.background_color,
                 color: config.text_color,
               }}
             >
-              {/* Background Blobs Simulation */}
               <div 
-                className="absolute top-[-10%] left-[-10%] w-[200px] h-[200px] rounded-full blur-[60px] opacity-30 pointer-events-none"
+                className="absolute top-[-10%] left-[-10%] w-[200px] h-[200px] rounded-full blur-[60px] opacity-30 pointer-events-none transition-colors duration-500"
                 style={{ backgroundColor: config.secondary_color }}
               />
               <div 
-                className="absolute bottom-[-10%] right-[-10%] w-[200px] h-[200px] rounded-full blur-[60px] opacity-30 pointer-events-none"
+                className="absolute bottom-[-10%] right-[-10%] w-[200px] h-[200px] rounded-full blur-[60px] opacity-30 pointer-events-none transition-colors duration-500"
                 style={{ backgroundColor: config.primary_color }}
               />
 
-              {/* Mockup Content: Landing Page Vibe */}
               <div className="relative z-10 flex flex-col items-center justify-center h-full text-center space-y-6">
                 
-                {/* Badge */}
                 <div 
-                  className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider opacity-80"
+                  className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider opacity-80 transition-colors duration-500"
                   style={{ 
-                    backgroundColor: `${config.primary_color}20`, // 20% opacity hex hack
+                    backgroundColor: `${config.primary_color}20`, 
                     color: config.primary_color,
                     border: `1px solid ${config.primary_color}40`
                   }}
@@ -145,7 +267,6 @@ export default function ThemeSettingsPage() {
                   Ready to Capture
                 </div>
 
-                {/* Title */}
                 <h2 className="text-3xl font-extrabold leading-tight">
                   {config.site_title}
                 </h2>
@@ -154,20 +275,18 @@ export default function ThemeSettingsPage() {
                   Create memories with our premium photobooth experience.
                 </p>
 
-                {/* Primary Button */}
                 <button 
-                  className="w-full py-3 rounded-full font-bold shadow-lg transition-transform active:scale-95"
+                  className="w-full py-3 rounded-full font-bold shadow-lg transition-all active:scale-95 duration-500"
                   style={{
                     background: `linear-gradient(to right, ${config.primary_color}, ${config.secondary_color})`,
-                    color: '#ffffff' // Button text always white usually safe
+                    color: '#ffffff'
                   }}
                 >
                   Start Camera
                 </button>
 
-                {/* Secondary Button */}
                 <button 
-                  className="w-full py-3 rounded-full font-bold border"
+                  className="w-full py-3 rounded-full font-bold border transition-colors duration-500"
                   style={{
                     borderColor: `${config.text_color}30`,
                     color: config.text_color
@@ -179,7 +298,6 @@ export default function ThemeSettingsPage() {
               </div>
             </div>
 
-            {/* Mockup Notch & Bar */}
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-6 bg-slate-900 rounded-b-xl"></div>
             <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-32 h-1 bg-slate-700 rounded-full"></div>
 
@@ -193,7 +311,6 @@ export default function ThemeSettingsPage() {
   );
 }
 
-// Component Kecil untuk Input Warna
 const ColorInput = ({ label, value, onChange }: { label: string, value: string, onChange: (v: string) => void }) => (
   <div>
     <label className="block text-xs font-medium mb-1 text-slate-400">{label}</label>
@@ -208,7 +325,7 @@ const ColorInput = ({ label, value, onChange }: { label: string, value: string, 
         type="text" 
         value={value} 
         onChange={(e) => onChange(e.target.value)}
-        className="flex-1 bg-slate-900 border border-slate-700 rounded px-2 py-2 text-xs text-white font-mono uppercase"
+        className="flex-1 bg-slate-900 border border-slate-700 rounded px-2 py-2 text-xs text-white font-mono uppercase transition-colors"
       />
     </div>
   </div>

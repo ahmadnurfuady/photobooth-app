@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Frame } from '@/types';
 import toast from 'react-hot-toast';
 
-// --- ICON COMPONENTS ---
+// --- ICON COMPONENTS (Tetap Sama) ---
 const CheckIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
 );
@@ -26,34 +26,71 @@ export default function FrameSelectionPage() {
   const [selectedFrame, setSelectedFrame] = useState<Frame | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // --- LOGIKA FETCH FRAME (Sesuai kode aslimu) ---
+  // --- LOGIKA FETCH FRAME (OFFLINE SUPPORT + API) ---
   useEffect(() => {
     const fetchFrames = async () => {
-      try {
-        const response = await fetch('/api/frames');
-        const data = await response.json();
-        
-        let validFrames: Frame[] = [];
-        if (Array.isArray(data)) {
-          validFrames = data;
-        } else if (Array.isArray(data.frames)) {
-          validFrames = data.frames;
-        } else if (Array.isArray(data.data)) {
-          validFrames = data.data;
+      // 1. CEK CACHE LOKAL DULU (Agar cepat & jalan saat offline)
+      const cachedFrames = localStorage.getItem('cached_frames');
+      if (cachedFrames) {
+        try {
+          const parsed = JSON.parse(cachedFrames);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setFrames(parsed);
+            setLoading(false); // Langsung stop loading karena data sudah ada
+          }
+        } catch (err) {
+          console.error("Error parsing cache:", err);
         }
+      }
 
-        // Filter active frames
-        const activeFrames = validFrames.filter((frame: any) => {
-           return frame.status === 'active' || frame.is_active === true || frame.status === 'published';
-        });
+      // 2. FETCH KE SERVER (Hanya jika online untuk update data terbaru)
+      if (navigator.onLine) {
+        try {
+          const response = await fetch('/api/frames');
+          const data = await response.json();
+          
+          let validFrames: Frame[] = [];
+          
+          // Penanganan struktur data yang bervariasi (Sesuai kode aslimu)
+          if (Array.isArray(data)) {
+            validFrames = data;
+          } else if (Array.isArray(data.frames)) {
+            validFrames = data.frames;
+          } else if (Array.isArray(data.data)) {
+            validFrames = data.data;
+          }
 
-        setFrames(activeFrames);
-      } catch (error) {
-        console.error('Error fetching frames:', error);
-        toast.error('Error loading frames');
-        setFrames([]);
-      } finally {
-        setLoading(false);
+          // Filter active frames (Sesuai kode aslimu)
+          const activeFrames = validFrames.filter((frame: any) => {
+             return frame.status === 'active' || frame.is_active === true || frame.status === 'published';
+          });
+
+          // Jika berhasil fetch, update state DAN simpan ke LocalStorage
+          if (activeFrames.length > 0) {
+            setFrames(activeFrames);
+            localStorage.setItem('cached_frames', JSON.stringify(activeFrames));
+            
+            // ✅ PRELOAD IMAGE: Agar gambar tersimpan di disk cache browser (Biar muncul pas offline)
+            activeFrames.forEach((f) => {
+                if (f.cloudinary_url) {
+                    const img = new window.Image();
+                    img.src = f.cloudinary_url;
+                }
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching frames:', error);
+          // Jika fetch gagal tapi tidak ada cache, baru munculkan error
+          if (!cachedFrames) toast.error('Error loading frames (Check Internet)');
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        // KONDISI OFFLINE & TIDAK ADA CACHE
+        if (!cachedFrames) {
+            toast.error("Offline Mode: No frames downloaded yet.");
+            setLoading(false);
+        }
       }
     };
 
@@ -67,13 +104,12 @@ export default function FrameSelectionPage() {
     }
     sessionStorage.setItem('selectedFrame', JSON.stringify(selectedFrame));
     
-    // ✅ KEMBALI KE ROUTE ASLI KAMU: '/capture'
-    // Jangan ke '/camera' karena kita sedang berada di file '/camera' (nanti looping)
+    // ✅ Route tetap ke /capture sesuai request
     router.push('/capture'); 
   };
 
   return (
-    // 1. CONTAINER UTAMA: Paksa Style Custom Theme
+    // 1. CONTAINER UTAMA: Paksa Style Custom Theme (dari Admin)
     <div 
       className="min-h-screen w-full relative flex flex-col font-sans overflow-hidden transition-colors duration-500"
       style={{ 
@@ -82,7 +118,7 @@ export default function FrameSelectionPage() {
       }}
     >
       
-      {/* 2. BACKGROUND EFFECTS: Pakai Primary & Secondary Color */}
+      {/* 2. BACKGROUND EFFECTS: Menggunakan Variable Primary & Secondary */}
       <div 
         className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] rounded-full blur-[120px] pointer-events-none opacity-20" 
         style={{ backgroundColor: 'var(--primary-color)' }}
@@ -178,6 +214,7 @@ export default function FrameSelectionPage() {
                     <div className="p-4 flex items-center justify-center aspect-[2/3] relative overflow-hidden rounded-t-2xl">
                       <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/20 pointer-events-none" />
                       
+                      {/* Menggunakan logic gambar aslimu (Cloudinary URL) */}
                       <img
                         src={frame.cloudinary_url}
                         alt={frame.name}

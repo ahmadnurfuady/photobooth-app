@@ -3,6 +3,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sessionQueries } from '@/lib/supabase';
 import { uploadToCloudinary } from '@/lib/cloudinary';
 import { v4 as uuidv4 } from 'uuid';
+import { createClient } from '@supabase/supabase-js'; // Import client untuk upsert manual jika diperlukan
+
+// Konfigurasi Supabase Client untuk akses langsung upsert jika sessionQueries tidak support
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 // POST /api/sessions - Create new photo session
 export async function POST(request: NextRequest) {
@@ -98,22 +105,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 5. Save session to Supabase
-    // Pastikan sessionQueries.create di lib/supabase Anda mendukung property 'id'
-    // Jika menggunakan supabase-js standard insert, ini akan bekerja.
-    const { data, error } = await sessionQueries.create({
-      id: sessionId, // ✅ Insert ID spesifik agar QR Code valid
-      frame_id,
-      photos: uploadedPhotos, // Simpan array JSON URL foto
-      composite_url: compositeResult.secure_url,
-      composite_public_id: compositeResult.public_id,
-      gif_url: gifResult.secure_url,
-      gif_public_id: gifResult.public_id,
-      photo_count: photos.length,
-      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      files_deleted: false,
-      deleted_at: null,
-    });
+    // 5. Save session to Supabase (MENGGUNAKAN UPSERT UNTUK MENCEGAH DUPLICATE KEY)
+    // Kita menggunakan upsert agar jika ID sudah ada (akibat sync ulang), data akan diperbarui bukan error.
+    const { data, error } = await supabaseAdmin
+      .from('photo_sessions') // Ganti dengan 'photo_sessions' jika itu nama tabel Anda di DB
+      .upsert({
+        id: sessionId, // ✅ Insert/Update ID spesifik agar QR Code valid
+        frame_id,
+        photos: uploadedPhotos, // Simpan array JSON URL foto
+        composite_url: compositeResult.secure_url, // Sesuaikan nama kolom di DB Anda (composite_url atau composite_photo)
+        composite_public_id: compositeResult.public_id,
+        gif_url: gifResult.secure_url, // Sesuaikan nama kolom di DB Anda (gif_url atau gif)
+        gif_public_id: gifResult.public_id,
+        photo_count: photos.length,
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        files_deleted: false,
+        deleted_at: null,
+        created_at: new Date().toISOString(),
+      }, {
+        onConflict: 'id' // Jika bentrok pada kolom ID, lakukan update
+      })
+      .select()
+      .single();
 
     if (error) {
       // LOGGING PENTING: Menampilkan detail error Supabase (misal: RLS policy violation)
