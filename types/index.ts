@@ -86,3 +86,16 @@ export interface User {
   email: string | null;
   displayName? :  string | null;
 }
+
+export interface Event {
+  id: string;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+  last_backup_at?: string | null;
+  preserved_stats?: any;
+  // Properti tambahan untuk UI (hasil join count)
+  _count?: {
+    photo_sessions: number;
+  };
+}

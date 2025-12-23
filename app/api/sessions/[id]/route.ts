@@ -4,11 +4,12 @@ import { sessionQueries } from '@/lib/supabase';
 
 // GET /api/sessions/[id] - Get session by ID
 export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
+  req: NextRequest, 
+  { params }: { params: Promise<{ id: string }> } // ✅ Ubah jadi Promise
 ) {
+  
   try {
-    const { id } = params;
+    const { id } = await params; // ✅ Wajib di-await dulu
 
     const { data, error } = await sessionQueries.getById(id);
 

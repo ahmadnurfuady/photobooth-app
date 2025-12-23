@@ -400,7 +400,7 @@ export const FrameUploadModal: React.FC<FrameUploadModalProps> = ({
           ) : (
             <>
               <Button variant="secondary" onClick={handleBack}>← Back</Button>
-              <Button variant="primary" onClick={handleSaveFrame} loading={loading} disabled={loading}>Save Frame</Button>
+              <Button variant="primary" onClick={handleSaveFrame} isLoading={loading} disabled={loading}>Save Frame</Button>
             </>
           )}
         </div>

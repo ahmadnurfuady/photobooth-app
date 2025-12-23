@@ -1,10 +1,9 @@
 // app/page.tsx
-'use client';
-
 import React from 'react';
 import Link from 'next/link';
+import { getActiveEvent } from '@/lib/actions/events'; // Pastikan path ini sesuai dengan lokasi action Anda
 
-// --- KOMPONEN IKON (Tetap sama seperti aslinya, tidak ada yang dihapus) ---
+// --- KOMPONEN IKON (Dijamin Lengkap & Tidak Diringkas) ---
 const CameraIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
 );
@@ -18,37 +17,42 @@ const LockIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
 );
 
-export default function LandingPage() {
+// PENTING: Menghapus 'use client' dan menjadikannya 'async' agar bisa fetch data database
+export default async function LandingPage() {
+  
+  // 1. Logika Baru: Ambil Event Aktif dari Database
+  // Fungsi ini harus mengembalikan object event atau null jika tidak ada yang aktif
+  const activeEvent = await getActiveEvent();
+
+  // 2. Logika Display: Jika ada event aktif, pakai namanya. Jika tidak, pakai default.
+  const titleText = activeEvent ? activeEvent.name : "Capture Moments,\nCreate Memories.";
+  
+  const subtitleText = activeEvent 
+    ? "Welcome to the official photobooth. Tap start to capture your moment!" 
+    : "The ultimate digital photobooth experience for your weddings, parties, and corporate events. Simple, fast, and instant sharing.";
+  
+  const badgeText = activeEvent ? "Event Live Now" : "Ready to Capture";
+
   return (
-    // 1. UPDATE CONTAINER: 
-    // - 'bg-customBg': Agar background berubah sesuai settingan Admin (misal jadi Hitam/Putih/Merah).
-    // - 'text-foreground': Agar warna teks otomatis kontras (misal BG gelap -> Teks Putih).
+    // CONTAINER UTAMA (Style Asli Dipertahankan)
+    // Menggunakan class text-foreground dan bg-customBg agar sinkron dengan tema admin
     <div className="min-h-screen w-full bg-customBg relative overflow-hidden flex flex-col font-sans text-foreground transition-colors duration-500">
       
       {/* --- EFEK BACKGROUND (BLOBS) --- */}
-      {/* 2. UPDATE BLOBS: 
-          - Menggunakan 'bg-secondary' dan 'bg-primary' dari settingan Admin.
-          - Kita tambahkan 'opacity-20' agar warnanya tidak terlalu ngejreng (transparan).
-      */}
       <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-secondary rounded-full blur-[120px] pointer-events-none opacity-20" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-primary rounded-full blur-[120px] pointer-events-none opacity-20" />
 
       {/* --- NAVBAR --- */}
       <nav className="w-full px-6 py-6 flex justify-between items-center z-10">
         <div className="flex items-center gap-2">
-          {/* 3. UPDATE LOGO: Gradient dinamis dari Primary ke Secondary */}
+          {/* LOGO */}
           <div className="w-8 h-8 bg-gradient-to-tr from-primary to-secondary rounded-lg flex items-center justify-center shadow-lg shadow-primary/20 text-customBg">
             <CameraIcon />
           </div>
-          {/* Titik menggunakan warna Primary */}
           <span className="text-xl font-bold tracking-tight">SnapBooth<span className="text-primary">.</span></span>
         </div>
         
         <Link href="/admin/login">
-          {/* 4. UPDATE TOMBOL LOGIN:
-              - text-foreground opacity-60: Warna teks mengikuti tema tapi agak pudar.
-              - hover:bg-foreground/5: Efek hover transparan yang aman untuk semua warna background.
-          */}
           <button className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-foreground opacity-60 hover:opacity-100 transition-all hover:bg-foreground/5 rounded-full">
             <LockIcon />
             Admin Access
@@ -56,42 +60,33 @@ export default function LandingPage() {
         </Link>
       </nav>
 
-      {/* --- HERO SECTION (BAGIAN TENGAH) --- */}
+      {/* --- HERO SECTION --- */}
       <main className="flex-1 flex flex-col items-center justify-center text-center px-4 z-10 mt-8 mb-16">
         
-        {/* Badge "Ready to Capture" */}
-        {/* 5. UPDATE BADGE: Warna border dan teks mengikuti 'primary' */}
+        {/* Badge "Ready to Capture" / "Event Live" */}
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-primary/20 text-primary text-xs font-semibold uppercase tracking-wider mb-6 animate-in fade-in slide-in-from-bottom-4 duration-700 relative overflow-hidden">
-          {/* Trik Layer Background Transparan (opacity 10%) */}
           <div className="absolute inset-0 bg-primary opacity-10 pointer-events-none"></div>
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
           </span>
-          <span className="relative">Ready to Capture</span>
+          <span className="relative">{badgeText}</span>
         </div>
 
-        {/* Judul Besar */}
-        {/* 6. UPDATE JUDUL: Menggunakan Gradient dari warna Foreground agar terlihat mewah tapi tetap terbaca */}
-        <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 bg-clip-text text-transparent bg-gradient-to-b from-foreground to-foreground/50 animate-in fade-in slide-in-from-bottom-6 duration-700">
-          Capture Moments,<br /> Create Memories.
+        {/* Judul Besar (Dinamis dari Database) */}
+        <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 bg-clip-text text-transparent bg-gradient-to-b from-foreground to-foreground/50 animate-in fade-in slide-in-from-bottom-6 duration-700 whitespace-pre-line">
+          {titleText}
         </h1>
 
-        {/* Sub-judul */}
-        {/* 7. UPDATE TEKS: Warna foreground dengan opacity 70% */}
+        {/* Sub-judul (Dinamis) */}
         <p className="text-lg md:text-xl text-foreground opacity-70 max-w-2xl mb-10 leading-relaxed animate-in fade-in slide-in-from-bottom-8 duration-700">
-          The ultimate digital photobooth experience for your weddings, parties, and corporate events. Simple, fast, and instant sharing.
+          {subtitleText}
         </p>
 
         {/* Tombol Mulai (CTA) */}
         <div className="animate-in fade-in zoom-in duration-700 delay-200">
           <Link href="/camera">
-            {/* 8. UPDATE TOMBOL UTAMA: 
-                - bg-foreground & text-customBg: Teknik "Invert". Jika tema gelap (BG Hitam), tombol jadi Putih. 
-                  Jika tema terang (BG Putih), tombol jadi Hitam. Selalu kontras!
-            */}
             <button className="group relative px-8 py-4 bg-foreground text-customBg rounded-full font-bold text-lg shadow-2xl hover:shadow-primary/40 transition-all transform hover:scale-105 active:scale-95 overflow-hidden">
-              {/* Efek kilauan hover dengan warna primary */}
               <span className="absolute inset-0 w-full h-full rounded-full bg-gradient-to-r from-primary via-secondary to-primary opacity-0 group-hover:opacity-20 transition-opacity" />
               <div className="flex items-center gap-3 relative z-10">
                 <CameraIcon />
@@ -131,7 +126,6 @@ export default function LandingPage() {
       </section>
 
       {/* --- FOOTER --- */}
-      {/* 9. UPDATE FOOTER: Garis dan teks menyesuaikan tema */}
       <footer className="w-full py-6 text-center text-foreground opacity-50 text-sm border-t border-foreground/10 bg-customBg/50 backdrop-blur-sm">
         <p>© {new Date().getFullYear()} Photobooth App. Crafted for experiences.</p>
       </footer>
@@ -140,7 +134,6 @@ export default function LandingPage() {
 }
 
 // --- KOMPONEN KARTU FITUR (Reusable) ---
-// 10. UPDATE KARTU: Background semi-transparan yang aman untuk semua tema
 const FeatureCard = ({ icon, title, desc, delay }: { icon: React.ReactNode, title: string, desc: string, delay: string }) => (
   <div className={`relative p-6 rounded-2xl border border-foreground/10 backdrop-blur-sm overflow-hidden group transition-all duration-700 animate-in fade-in slide-in-from-bottom-10 ${delay}`}>
     
@@ -149,7 +142,6 @@ const FeatureCard = ({ icon, title, desc, delay }: { icon: React.ReactNode, titl
 
     {/* Isi Kartu */}
     <div className="relative z-10">
-      {/* Ikon dengan background gradient tipis */}
       <div className="w-12 h-12 rounded-xl flex items-center justify-center text-primary mb-4 relative overflow-hidden">
          <div className="absolute inset-0 bg-gradient-to-br from-primary to-secondary opacity-10"></div>
          {icon}

@@ -145,7 +145,7 @@ export const LoginForm: React.FC = () => {
         </div>
       </div>
 
-      <Button type="submit" className="w-full" loading={loading} disabled={loading}>
+      <Button type="submit" className="w-full" isLoading={loading} disabled={loading}>
         {loading ? 'Signing in...' : 'Sign In'}
       </Button>
     </form>

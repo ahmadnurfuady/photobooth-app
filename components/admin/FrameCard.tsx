@@ -119,7 +119,7 @@ export const FrameCard: React.FC<FrameCardProps> = ({ frame, onUpdate, onDelete 
                 <Button
                   size="sm"
                   onClick={handleSaveName}
-                  loading={loading}
+                  isLoading={loading}
                   disabled={loading}
                   className="flex-1"
                 >
@@ -170,7 +170,7 @@ export const FrameCard: React.FC<FrameCardProps> = ({ frame, onUpdate, onDelete 
                 size="sm"
                 variant={frame.is_active ? 'secondary' : 'primary'}
                 onClick={handleToggleActive}
-                loading={loading}
+                isLoading={loading}
                 disabled={loading}
                 className="flex-1"
               >

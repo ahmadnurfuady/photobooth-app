@@ -211,7 +211,7 @@ export const FrameUploadForm: React.FC<FrameUploadFormProps> = ({
           </Button>
           <Button 
             onClick={handleSubmit} 
-            loading={loading} 
+            isLoading={loading} 
             disabled={loading}
             className="flex-1 bg-blue-600 hover:bg-blue-500 text-white"
           >

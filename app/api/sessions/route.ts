@@ -23,6 +23,16 @@ export async function POST(request: NextRequest) {
       gif, // GIF animation
     } = body;
 
+    // Sebelum simpan, cari dulu event mana yang sedang is_active = true
+    const { data: activeEvent } = await supabaseAdmin
+      .from('events')
+      .select('id')
+      .eq('is_active', true)
+      .single();
+
+    const eventId = activeEvent ? activeEvent.id : null;
+    // -------------------------------------
+
     // 1. Validation
     // Backend mewajibkan semua data ini ada.
     if (!frame_id || !photos || !composite_photo || !gif) {
@@ -112,6 +122,7 @@ export async function POST(request: NextRequest) {
       .upsert({
         id: sessionId, // ✅ Insert/Update ID spesifik agar QR Code valid
         frame_id,
+        event_id: eventId, // Simpan event_id yang aktif saat itu
         photos: uploadedPhotos, // Simpan array JSON URL foto
         composite_url: compositeResult.secure_url, // Sesuaikan nama kolom di DB Anda (composite_url atau composite_photo)
         composite_public_id: compositeResult.public_id,

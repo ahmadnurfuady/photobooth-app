@@ -1,7 +1,7 @@
 // app/result/page.tsx
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react'; // 1. Import useRef
 import { useRouter } from 'next/navigation';
 import { Frame, PhotoSession } from '@/types';
 import { Button } from '@/components/ui/Button';
@@ -42,8 +42,18 @@ export default function ResultPage() {
   const [gifUrl, setGifUrl] = useState<string | null>(null);
   const [session, setSession] = useState<PhotoSession | null>(null);
 
+  // 2. REF LOCK: Variabel ini tidak akan mereset ulang saat render ulang
+  const processingRef = useRef(false);
+
   // 1. INIT
   useEffect(() => {
+    // 3. CEK KUNCI: Jika sudah pernah jalan, hentikan seketika!
+    if (processingRef.current === true) {
+        return; 
+    }
+    // Kunci pintu agar proses kedua tidak bisa masuk
+    processingRef.current = true;
+
     const newId = generateSessionId();
     setSessionId(newId);
     
@@ -52,6 +62,8 @@ export default function ResultPage() {
     setDownloadUrl(`${appUrl}/download/${newId}`);
 
     loadAndStartBackgroundProcess(newId);
+    
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadAndStartBackgroundProcess = async (currentSessionId: string) => {
@@ -148,8 +160,6 @@ export default function ResultPage() {
       } catch (uploadError: any) {
         console.warn("Upload failed, attempting to save to queue...");
         
-        // JANGAN simpan ke localStorage jika errornya adalah Column Mismatch saat ONLINE
-        // Karena data Base64 akan memenuhi kuota 5MB dengan cepat
         if (navigator.onLine && (uploadError.message.includes('column') || uploadError.message.includes('PGRST'))) {
           setStatus('error');
           setProgressMessage('Database Error: Column mismatch');
