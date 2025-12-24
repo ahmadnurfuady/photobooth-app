@@ -17,6 +17,7 @@ export interface CameraPreviewProps {
   frame: Frame;
   capturedPhotos: (string | null)[];
   currentCapturedPhoto: string | null;
+  selectedDeviceId?: string | null;
 }
 
 export const CameraPreview: React.FC<CameraPreviewProps> = ({
@@ -29,6 +30,7 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
   frame,
   capturedPhotos,
   currentCapturedPhoto,
+  selectedDeviceId,
 }) => {
   const webcamRef = useRef<Webcam>(null);
   const cameraContainerRef = useRef<HTMLDivElement>(null);
@@ -37,7 +39,7 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
   const [isCapturing, setIsCapturing] = useState(false);
   const [frameDimensions, setFrameDimensions] = useState<{ width: number; height: number } | null>(null);
   
-  // State dimensi container untuk kalkulasi capture
+  // State dimensi container
   const [containerDims, setContainerDims] = useState({ width: 640, height: 480 });
 
   // 1. RESPONSIVE LISTENER
@@ -110,7 +112,6 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
     const FORCE_ASPECT_RATIO = 4 / 3;
     const slotAspectRatio = FORCE_ASPECT_RATIO;
     
-    // Ukuran dinamis (75% dari container)
     const targetBoxSize = containerDims.width * 0.75; 
 
     let boxWidth, boxHeight;
@@ -215,10 +216,8 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
     }
   }, [onCapture, currentSlot, boundingBox, containerDims]);
 
-  // 7. RENDER UI (CUSTOM THEME APPLIED)
+  // 7. RENDER UI
   return (
-    // Container UI: Background Transparan (karena parent sudah berwarna)
-    // text-slate-100 diganti color: var(--foreground)
     <div 
         className="h-full w-full flex flex-col lg:flex-row gap-4 p-4 lg:p-6 overflow-hidden relative font-sans"
         style={{ color: 'var(--foreground)' }}
@@ -239,7 +238,6 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
           <button
             onClick={() => setMirrored(!mirrored)}
             className="flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs lg:text-sm font-medium backdrop-blur-md"
-            // Style tombol Mirrored dinamis
             style={{ 
                 backgroundColor: 'rgba(128,128,128, 0.2)', 
                 borderColor: 'rgba(128,128,128, 0.3)',
@@ -253,11 +251,10 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
           </button>
         </div>
 
-        {/* CONTAINER WEBCAM RESPONSIVE */}
+        {/* CONTAINER WEBCAM */}
         <div 
           ref={cameraContainerRef}
           className="relative w-full max-w-2xl aspect-[4/3] bg-black rounded-2xl overflow-hidden shadow-2xl border-[3px]"
-          // Border container webcam agar tidak hardcoded slate
           style={{ borderColor: 'rgba(128,128,128, 0.3)' }}
         >
           <div className="absolute inset-0">
@@ -265,16 +262,20 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
               ref={webcamRef}
               audio={false}
               screenshotFormat="image/jpeg"
-              videoConstraints={{ facingMode: 'user', width: 1280, height: 720 }}
+              videoConstraints={{ 
+                deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
+                facingMode: selectedDeviceId ? undefined : 'user', 
+                width: 1280, 
+                height: 720 
+              }}
               mirrored={mirrored}
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             />
           </div>
 
-          {/* Bounding Box Overlay (KOTAK FOKUS) */}
+          {/* Bounding Box & Overlays */}
           {currentSlot && !currentCapturedPhoto && (
             <>
-              {/* Overlay Gelap */}
               <div className="absolute inset-0 pointer-events-none z-[9]">
                 <div 
                   className="absolute inset-0 bg-black/60" 
@@ -291,7 +292,6 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
                 />
               </div>
 
-              {/* Garis FOKUS (Mengikuti Warna Primary agar match tema) */}
               <div 
                 className="absolute border-4 pointer-events-none z-10"
                 style={{
@@ -300,11 +300,10 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
                   left: boundingBox.left,
                   top: boundingBox.top,
                   transform: boundingBox.transform,
-                  borderColor: 'var(--primary-color)', // DYNAMIC COLOR
-                  boxShadow: '0 0 30px var(--primary-color)' // DYNAMIC GLOW
+                  borderColor: 'var(--primary-color)',
+                  boxShadow: '0 0 30px var(--primary-color)'
                 }}
               >
-                {/* Hiasan Sudut */}
                 <div className="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4" style={{ borderColor: 'var(--primary-color)' }} />
                 <div className="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4" style={{ borderColor: 'var(--primary-color)' }} />
                 <div className="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4" style={{ borderColor: 'var(--primary-color)' }} />
@@ -313,14 +312,12 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
             </>
           )}
 
-          {/* Countdown Overlay */}
           {countdown !== null && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px] z-20">
               <div className="text-white text-8xl lg:text-9xl font-extrabold animate-pulse drop-shadow-lg">{countdown}</div>
             </div>
           )}
 
-          {/* Captured Notification */}
           {currentCapturedPhoto && (
             <div className="absolute top-4 left-0 right-0 text-center z-20">
               <span 
@@ -350,7 +347,6 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
                   />
                 ) : (
                   <div className="w-12 h-12 lg:w-16 lg:h-16 rounded-full border-[4px] border-slate-300 flex items-center justify-center group-hover:border-slate-400">
-                    {/* Tombol Shutter Mengikuti Warna Primary */}
                     <div 
                         className="w-10 h-10 lg:w-12 lg:h-12 rounded-full shadow-inner" 
                         style={{ backgroundColor: 'var(--primary-color)' }}
@@ -373,10 +369,15 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
         </div>
       </div>
 
-      {/* --- BAGIAN KANAN: FRAME PREVIEW (CUSTOM THEMED) --- */}
-      <div className="hidden lg:flex w-80 lg:w-96 flex-col justify-center shrink-0 z-10">
+      {/* --- BAGIAN KANAN: FRAME PREVIEW --- */}
+      {/* PERBAIKAN VISUAL:
+         1. justify-center tetap ada.
+         2. pt-12: Menambahkan padding atas agar panel ini turun sedikit.
+         3. h-auto: Tinggi otomatis mengikuti isi, tidak dipaksa h-[85vh] yg membuatnya terlalu panjang.
+      */}
+      <div className="hidden lg:flex w-80 lg:w-96 flex-col justify-center shrink-0 z-10 pt-12">
         <div 
-            className="backdrop-blur-md rounded-3xl shadow-2xl p-6 h-[85vh] flex flex-col border"
+            className="backdrop-blur-md rounded-3xl shadow-2xl p-6 h-auto max-h-[90vh] flex flex-col border"
             style={{ 
                 backgroundColor: 'rgba(128,128,128, 0.1)', 
                 borderColor: 'rgba(128,128,128, 0.2)' 
@@ -438,7 +439,6 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
                     variant="secondary" 
                     onClick={onRetake} 
                     className="w-full shadow-sm border"
-                    // Style manual untuk button Retake
                     style={{ 
                         backgroundColor: 'rgba(128,128,128, 0.2)', 
                         borderColor: 'rgba(128,128,128, 0.3)',
@@ -452,10 +452,9 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
                   <Button 
                     onClick={onNext} 
                     className="w-full shadow-lg text-white"
-                    // Style manual Next Photo (Primary)
                     style={{ 
                         backgroundColor: 'var(--primary-color)',
-                        color: 'var(--bg-color)' // Invert text
+                        color: 'var(--bg-color)' 
                     }}
                   >
                     Next Photo
@@ -464,7 +463,6 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
                   <Button 
                     onClick={onFinish} 
                     className="w-full text-white shadow-lg"
-                    // Style manual Finish (Gradient)
                     style={{ 
                         background: 'linear-gradient(to right, var(--primary-color), var(--secondary-color))',
                         color: '#fff'
@@ -476,7 +474,6 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
               </div>
             )}
             
-            {/* PROGRESS DOTS */}
             <div className="mt-6 flex justify-center gap-2">
               {Array.from({ length: actualTotalPhotos }).map((_, index) => (
                 <div 
