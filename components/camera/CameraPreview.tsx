@@ -133,25 +133,7 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
     };
   }, [currentSlot, frameDimensions, containerDims.width]);
 
-  // 5. COUNTDOWN
-  const startCountdown = useCallback(() => {
-    if (isCapturing || currentCapturedPhoto) return;
-    setIsCapturing(true);
-    let count = 3;
-    setCountdown(count);
-    const interval = setInterval(() => {
-      count--;
-      if (count > 0) {
-        setCountdown(count);
-      } else {
-        setCountdown(null);
-        clearInterval(interval);
-        capturePhoto();
-      }
-    }, 1000);
-  }, [isCapturing, currentCapturedPhoto]);
-
-  // 6. FUNGSI CAPTURE
+  // 5. DEFINISI FUNGSI CAPTURE (Dipindah ke atas agar bisa dipanggil useEffect)
   const capturePhoto = useCallback(() => {
     if (!webcamRef.current || !cameraContainerRef.current || !currentSlot) return;
 
@@ -216,7 +198,84 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
     }
   }, [onCapture, currentSlot, boundingBox, containerDims]);
 
-  // 7. RENDER UI
+  // 6. COUNTDOWN
+  const startCountdown = useCallback(() => {
+    if (isCapturing || currentCapturedPhoto) return;
+    setIsCapturing(true);
+    let count = 3;
+    setCountdown(count);
+    const interval = setInterval(() => {
+      count--;
+      if (count > 0) {
+        setCountdown(count);
+      } else {
+        setCountdown(null);
+        clearInterval(interval);
+        capturePhoto();
+      }
+    }, 1000);
+  }, [isCapturing, currentCapturedPhoto, capturePhoto]);
+
+  // ✅ 7. FITUR BARU: REMOTE CLICKER / KEYBOARD LISTENER
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Cegah scrolling kalau pencet spasi/arrow
+      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) {
+        event.preventDefault();
+      }
+
+      // --- LOGIKA CLICKER ---
+      
+      // 1. TOMBOL CAPTURE (Tengah/Start/B)
+      // Biasanya remote kirim: Enter, Space, atau 'b' (black screen)
+      if (['Enter', 'Space', 'KeyB'].includes(event.code)) {
+        if (!currentCapturedPhoto && !isCapturing && !countdown) {
+           startCountdown();
+        }
+      }
+
+      // 2. TOMBOL NEXT (Kanan)
+      // Biasanya remote kirim: ArrowRight, PageDown, atau 'n'
+      if (['ArrowRight', 'PageDown', 'KeyN'].includes(event.code)) {
+         if (currentCapturedPhoto) {
+            // Kalau sudah foto terakhir, dia akan Finish. Kalau belum, Next Photo.
+            if (photoNumber < actualTotalPhotos) {
+                onNext();
+            } else {
+                onFinish();
+            }
+         }
+      }
+
+      // 3. TOMBOL RETAKE (Kiri)
+      // Biasanya remote kirim: ArrowLeft, PageUp, atau 'p'
+      if (['ArrowLeft', 'PageUp', 'KeyP'].includes(event.code)) {
+         if (currentCapturedPhoto) {
+            onRetake();
+         }
+      }
+    };
+
+    // Pasang listener ke window
+    window.addEventListener('keydown', handleKeyDown);
+
+    // Bersihkan listener saat komponen hilang
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [
+    startCountdown, 
+    onNext, 
+    onFinish, 
+    onRetake, 
+    currentCapturedPhoto, 
+    isCapturing, 
+    countdown,
+    photoNumber,
+    actualTotalPhotos
+  ]);
+
+  // 8. RENDER UI (Dengan Layout Perbaikan)
   return (
     <div 
         className="h-full w-full flex flex-col lg:flex-row gap-4 p-4 lg:p-6 overflow-hidden relative font-sans"
@@ -334,6 +393,7 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
         <div className="w-full flex flex-col items-center justify-center min-h-[100px] mt-2 shrink-0">
           {!currentCapturedPhoto && (
             <div className="flex flex-col items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300">
+              {/* TOMBOL SHUTTER BESAR (Bisa diklik atau pakai Remote) */}
               <Button
                 size="lg"
                 onClick={startCountdown}
@@ -362,19 +422,14 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
                     color: 'var(--foreground)'
                 }}
               >
-                Position yourself inside the box
+                Press Space/Clicker to Capture
               </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* --- BAGIAN KANAN: FRAME PREVIEW --- */}
-      {/* PERBAIKAN VISUAL:
-         1. justify-center tetap ada.
-         2. pt-12: Menambahkan padding atas agar panel ini turun sedikit.
-         3. h-auto: Tinggi otomatis mengikuti isi, tidak dipaksa h-[85vh] yg membuatnya terlalu panjang.
-      */}
+      {/* --- BAGIAN KANAN: FRAME PREVIEW (Updated Layout) --- */}
       <div className="hidden lg:flex w-80 lg:w-96 flex-col justify-center shrink-0 z-10 pt-12">
         <div 
             className="backdrop-blur-md rounded-3xl shadow-2xl p-6 h-auto max-h-[90vh] flex flex-col border"
@@ -435,6 +490,7 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
             {currentCapturedPhoto && (
               <div className="space-y-3 animate-in slide-in-from-bottom-2">
                 
+                {/* RETAKE (Map ke tombol KIRI remote) */}
                 <Button 
                     variant="secondary" 
                     onClick={onRetake} 
@@ -445,10 +501,11 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
                         color: 'var(--foreground)'
                     }}
                 >
-                  Retake Photo
+                  Retake Photo 
                 </Button>
 
                 {photoNumber < actualTotalPhotos ? (
+                  /* NEXT (Map ke tombol KANAN remote) */
                   <Button 
                     onClick={onNext} 
                     className="w-full shadow-lg text-white"
@@ -457,7 +514,7 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
                         color: 'var(--bg-color)' 
                     }}
                   >
-                    Next Photo
+                    Next Photo 
                   </Button>
                 ) : (
                   <Button 
@@ -468,7 +525,7 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
                         color: '#fff'
                     }}
                   >
-                    Finish Session
+                    Finish Session (→)
                   </Button>
                 )}
               </div>
