@@ -1,20 +1,25 @@
-// app/result/page.tsx
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react'; // 1. Import useRef
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Frame, PhotoSession } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { QRCodeCanvas } from 'qrcode.react';
 import toast from 'react-hot-toast';
 import Image from 'next/image';
+
+// ✅ IMPORT CUSTOM LOGGER (Sistem Monitoring Baru)
+import { logger } from '@/lib/Logger'; 
+
+// ✅ IMPORT SENTRY (Tetap dipertahankan sesuai kode asli Anda)
+import { captureSystemError } from '@/src/utils/errorHandler'; 
+
 import {
   createPhotoStripWithFrame,
   generateGIF,
   downloadBase64Image,
 } from '@/lib/imageProcessing';
 
-// Helper: Generate ID unik
 const generateSessionId = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID();
@@ -42,22 +47,20 @@ export default function ResultPage() {
   const [gifUrl, setGifUrl] = useState<string | null>(null);
   const [session, setSession] = useState<PhotoSession | null>(null);
 
-  // 2. REF LOCK: Variabel ini tidak akan mereset ulang saat render ulang
   const processingRef = useRef(false);
 
-  // 1. INIT
   useEffect(() => {
-    // 3. CEK KUNCI: Jika sudah pernah jalan, hentikan seketika!
     if (processingRef.current === true) {
         return; 
     }
-    // Kunci pintu agar proses kedua tidak bisa masuk
     processingRef.current = true;
 
     const newId = generateSessionId();
     setSessionId(newId);
     
-    // Gunakan origin agar HP bisa akses lewat IP Lokal yang sama
+    // ✅ LOGGER: Track Session Start
+    logger.info('SESSION_INIT', 'User arrived at Result Page', { sessionId: newId });
+    
     const appUrl = typeof window !== 'undefined' ? window.location.origin : '';
     setDownloadUrl(`${appUrl}/download/${newId}`);
 
@@ -72,6 +75,17 @@ export default function ResultPage() {
       const photosData = sessionStorage.getItem('capturedPhotos');
 
       if (!frameData || !photosData) {
+        // ✅ LOGGER: Warning
+        logger.warn('SESSION_DATA_MISSING', 'User refreshed or accessed directly', { sessionId: currentSessionId });
+        
+        // Sentry Log
+        captureSystemError({
+             error: new Error("Session Storage Empty"),
+             category: "UI",
+             message: "User mengakses result page tanpa data foto",
+             severity: "warning"
+        });
+
         toast.error('No session data found. Redirecting...');
         router.push('/camera');
         return;
@@ -89,7 +103,15 @@ export default function ResultPage() {
       await processAllPhotos(frame, photos, currentSessionId);
 
     } catch (error) {
-      console.error('Error loading data:', error);
+      // ✅ LOGGER: Error
+      logger.error('DATA_LOAD_ERROR', error, { sessionId: currentSessionId });
+
+      captureSystemError({
+          error: error,
+          category: "UI",
+          message: "Gagal memparsing data dari Session Storage",
+          severity: "error"
+      });
       setStatus('error');
       setProgressMessage('Failed to load data.');
     }
@@ -100,14 +122,29 @@ export default function ResultPage() {
       // --- STEP 1: COMPOSITE PHOTO ---
       let finalComposite: string | null = null;
       try {
-        finalComposite = await createPhotoStripWithFrame(
-          photos,
-          frame.cloudinary_url,
-          frame.photo_slots || undefined,
-          frame.frame_config?.photo_count || photos.length
+        // ✅ MONITOR: Track Performance (Generate Composite)
+        finalComposite = await logger.monitorOperation(
+            'GENERATE_COMPOSITE',
+            async () => {
+                return await createPhotoStripWithFrame(
+                    photos,
+                    frame.cloudinary_url,
+                    frame.photo_slots || undefined,
+                    frame.frame_config?.photo_count || photos.length
+                );
+            },
+            { photoCount: photos.length, frameId: frame.id }
         );
       } catch (libError) {
-        console.warn("Library composite failed, using fallback...", libError);
+        // ✅ LOGGER: Fallback
+        logger.warn('COMPOSITE_FALLBACK', 'Using canvas fallback', { error: String(libError) });
+
+        captureSystemError({
+            error: libError,
+            category: "UI",
+            message: "Library composite gagal, menggunakan fallback canvas",
+            severity: "warning"
+        });
         finalComposite = await generateCompositeFallback(photos, frame);
       }
       
@@ -118,8 +155,21 @@ export default function ResultPage() {
       setProgressMessage('Creating animation... ✨');
       let finalGif: string | null = null;
       try {
-        finalGif = await generateGIF(photos);
+        // ✅ MONITOR: Track Performance (GIF)
+        finalGif = await logger.monitorOperation(
+            'GENERATE_GIF',
+            async () => await generateGIF(photos),
+            { photoCount: photos.length }
+        );
       } catch (gifError) {
+        logger.warn('GIF_FAILED', 'Skipping GIF generation', { error: String(gifError) });
+
+        captureSystemError({
+            error: gifError,
+            category: "UI",
+            message: "Gagal generate GIF",
+            severity: "info"
+        });
         finalGif = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
       }
       setGifUrl(finalGif);
@@ -135,21 +185,28 @@ export default function ResultPage() {
             id: currentSessionId,
             frame_id: frame.id,
             photos: photos,
-            composite_photo: finalComposite, // Dikirim ke API, nanti API yang mapping ke composite_url
+            composite_photo: finalComposite, 
             gif: finalGif || "",
         };
 
-        const response = await fetch('/api/sessions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
+        // ✅ MONITOR: Track Upload Performance & Success
+        const responseData = await logger.monitorOperation(
+            'UPLOAD_SESSION_API',
+            async () => {
+                const response = await fetch('/api/sessions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
 
-        const responseData = await response.json();
-
-        if (!response.ok) {
-          throw new Error(responseData.error || "Server Upload Failed");
-        }
+                if (!response.ok) {
+                    const errJson = await response.json();
+                    throw new Error(errJson.error || `Server Upload Failed: ${response.status}`);
+                }
+                return await response.json();
+            },
+            { sessionId: currentSessionId }
+        );
 
         setSession(responseData.data);
         
@@ -157,16 +214,56 @@ export default function ResultPage() {
         setProgressMessage('Ready!');
         toast.success('Upload complete!');
 
+        // ✅ LOGGER: Success
+        logger.info('SESSION_COMPLETED', 'Session finished successfully', { sessionId: currentSessionId });
+
       } catch (uploadError: any) {
-        console.warn("Upload failed, attempting to save to queue...");
         
-        if (navigator.onLine && (uploadError.message.includes('column') || uploadError.message.includes('PGRST'))) {
-          setStatus('error');
-          setProgressMessage('Database Error: Column mismatch');
-          toast.error("Database error. Please check table schema.");
-          return;
+        // --- LOGIKA ERROR & OFFLINE ---
+        const isNetworkError = !navigator.onLine || uploadError.message.includes("Offline") || uploadError.message.includes("fetch");
+        
+        // Sentry & Logger Logic
+        if (uploadError.message.includes('column') || uploadError.message.includes('PGRST')) {
+            // ✅ LOGGER: Fatal DB Error
+            logger.critical('DATABASE_SCHEMA_MISMATCH', uploadError, { sessionId: currentSessionId });
+
+            captureSystemError({
+               error: uploadError,
+               category: "DATABASE",
+               message: "Mismatch Schema Database saat Upload Sesi",
+               severity: "fatal"
+           });
+           
+           setStatus('error');
+           setProgressMessage('Database Error: Column mismatch');
+           toast.error("Database error. Please check table schema.");
+           return;
         }
 
+        if (!isNetworkError) {
+            // ✅ LOGGER: Server Error
+            logger.error('UPLOAD_SERVER_ERROR', uploadError, { sessionId: currentSessionId });
+
+            captureSystemError({
+               error: uploadError,
+               category: "NETWORK",
+               message: "Gagal upload sesi ke API (Internet Available)",
+               severity: "error"
+           });
+        } else {
+            // ✅ LOGGER: Offline Info
+            logger.info('NETWORK_OFFLINE', 'Switching to offline storage mode', { sessionId: currentSessionId });
+
+            captureSystemError({
+               error: new Error("Switched to Offline Mode"),
+               category: "NETWORK",
+               message: "Koneksi mati, data disimpan ke LocalStorage",
+               severity: "info"
+           });
+        }
+
+        console.warn("Upload failed, attempting to save to queue...");
+        
         const payloadToSave = {
             id: currentSessionId,
             frame_id: frame.id,
@@ -178,7 +275,6 @@ export default function ResultPage() {
         try {
             const currentQueue = JSON.parse(localStorage.getItem('pending_uploads') || '[]');
             
-            // Proteksi: Jika antrian sudah ada 2, hapus yang paling lama agar tidak meledak
             if (currentQueue.length >= 2) currentQueue.shift();
 
             currentQueue.push(payloadToSave);
@@ -187,7 +283,21 @@ export default function ResultPage() {
             setStatus('offline_saved'); 
             setProgressMessage('Saved Locally (Waiting for Internet)');
             toast('Saved offline. Will sync later.', { icon: '💾' });
+
+            // ✅ LOGGER: Saved Offline
+            logger.info('OFFLINE_SAVE_SUCCESS', 'Session saved to localStorage', { queueLength: currentQueue.length + 1 });
+
         } catch (storageError) {
+            // ✅ LOGGER: Critical Storage Full
+            logger.critical('LOCAL_STORAGE_FULL', storageError, { sessionId: currentSessionId });
+
+            captureSystemError({
+               error: storageError,
+               category: "UI",
+               message: "LocalStorage Penuh - Gagal simpan offline backup",
+               severity: "warning"
+           });
+           
             console.error("LocalStorage Full!", storageError);
             setStatus('offline_saved');
             setProgressMessage('Memory Full - Please Download Manually');
@@ -199,6 +309,16 @@ export default function ResultPage() {
       sessionStorage.removeItem('capturedPhotos');
 
     } catch (criticalError: any) {
+      // ✅ LOGGER: Fatal Crash
+      logger.critical('RESULT_PAGE_CRASH', criticalError, { sessionId: currentSessionId });
+
+      captureSystemError({
+          error: criticalError,
+          category: "UNKNOWN",
+          message: "Critical Error di Result Page (Process All Photos)",
+          severity: "fatal"
+      });
+      
       console.error('Critical Processing Error:', criticalError);
       toast.error(`Error: ${criticalError.message}`);
       setStatus('error');
@@ -264,6 +384,8 @@ export default function ResultPage() {
   const handleDownloadComposite = () => {
     if (compositePhoto) {
       downloadBase64Image(compositePhoto, `photobooth-strip-${Date.now()}.jpg`);
+      // ✅ LOGGER: User Action
+      logger.info('USER_DOWNLOAD_PHOTO', 'User downloaded composite', { sessionId });
       toast.success('Photo strip downloaded!');
     }
   };
@@ -271,6 +393,8 @@ export default function ResultPage() {
   const handleDownloadGif = () => {
     if (gifUrl && gifUrl.startsWith('data:image')) {
       downloadBase64Image(gifUrl, `photobooth-anim-${Date.now()}.gif`);
+      // ✅ LOGGER: User Action
+      logger.info('USER_DOWNLOAD_GIF', 'User downloaded GIF', { sessionId });
       toast.success('GIF downloaded!');
     } else {
       toast.error('GIF not available');
@@ -278,6 +402,8 @@ export default function ResultPage() {
   };
 
   const handleNewSession = () => {
+    // ✅ LOGGER: User Action
+    logger.info('USER_NEW_SESSION', 'User started new session', { previousSessionId: sessionId });
     router.push('/camera'); 
   };
 

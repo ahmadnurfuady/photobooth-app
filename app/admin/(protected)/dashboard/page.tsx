@@ -4,16 +4,18 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Card, CardHeader, CardBody } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button'; // Pastikan Button support className custom
+import { Button } from '@/components/ui/Button'; 
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { AddFrameModal } from '@/components/admin/AddFrameModal';
 import { Frame } from '@/types';
 import { formatDate } from '@/lib/utils';
 import { useAuth } from '@/lib/hooks/useAuth';
 
-// ✅ IMPORT KOMPONEN BARU
 import { getDashboardStats } from '@/lib/actions/dashboard';
 import DashboardStats from '@/components/admin/DashboardStats';
+
+// ✅ IMPORT HEALTH WIDGET
+import { HealthWidget } from '@/components/HealthWidget';
 
 // Interface Data Stats
 interface DashboardData {
@@ -49,11 +51,11 @@ export default function AdminDashboardPage() {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      // 1. Ambil Stats dari Server Action (Logic Baru)
+      // 1. Ambil Stats dari Server Action
       const statsData = await getDashboardStats();
       setStats(statsData);
 
-      // 2. Ambil Recent Frames dari API (Logic Lama)
+      // 2. Ambil Recent Frames dari API
       const framesResponse = await fetch('/api/frames');
       if (framesResponse.ok) {
         const framesData = await framesResponse.json();
@@ -70,7 +72,6 @@ export default function AdminDashboardPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        {/* Loading Spinner pakai text-primary biar ikut tema */}
         <LoadingSpinner size="lg" className="text-primary" />
       </div>
     );
@@ -78,18 +79,28 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600 mt-2">
-          Welcome back, {user?.email?.split('@')[0]}! 👋
-        </p>
+      {/* ✅ HEADER SECTION UPDATE:
+         Menggunakan Flexbox untuk menaruh Judul di kiri dan HealthWidget di kanan.
+         Responsive: Di mobile akan stack vertikal, di desktop bersebelahan.
+      */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-gray-600 mt-2">
+            Welcome back, {user?.email?.split('@')[0]}! 👋
+          </p>
+        </div>
+        
+        {/* Widget Kesehatan */}
+        <div className="w-full md:w-auto">
+          <HealthWidget />
+        </div>
       </div>
 
-      {/* ✅ STATS GRID: Pakai Komponen yang sudah kita bikin dinamis */}
+      {/* STATS GRID */}
       <DashboardStats stats={stats} />
 
-      {/* ✅ QUICK ACTIONS: Warna diubah jadi 'primary' (Dinamis) */}
+      {/* QUICK ACTIONS */}
       <Card>
         <CardHeader>
           <h2 className="text-xl font-semibold text-gray-900">Quick Actions</h2>
@@ -100,13 +111,10 @@ export default function AdminDashboardPage() {
             {/* BUTTON 1: Add Frame */}
             <button
               onClick={() => setIsModalOpen(true)}
-              // HAPUS: border-blue-300, GANTI: border-gray-300 hover:border-primary
               className="p-6 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary hover:bg-primary/5 transition-all cursor-pointer group text-left"
             >
               <div className="flex items-center gap-4">
-                {/* HAPUS: bg-blue-100, GANTI: bg-primary/10 */}
                 <div className="p-3 bg-primary/10 rounded-lg group-hover:bg-primary/20 transition-colors">
-                  {/* HAPUS: text-blue-600, GANTI: text-primary */}
                   <svg
                     className="w-6 h-6 text-primary"
                     fill="none"
@@ -134,7 +142,7 @@ export default function AdminDashboardPage() {
                       stroke="currentColor"
                       viewBox="0 0 24 24"
                     >
-                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
                   </div>
                   <div>
@@ -182,7 +190,6 @@ export default function AdminDashboardPage() {
               <p className="mt-2 text-gray-600">No frames yet</p>
               
               <Link href="/admin/frames">
-                {/* GANTI BUTTON: Pakai class manual biar pasti warnanya bener */}
                 <Button className="mt-4 bg-primary text-white hover:bg-primary/90">
                   Upload Your First Frame
                 </Button>
@@ -207,7 +214,6 @@ export default function AdminDashboardPage() {
                     <p className="text-sm text-gray-500">{formatDate(frame.created_at)}</p>
                   </div>
                   <div>
-                    {/* STATUS BADGE: Tetap Hijau/Abu karena ini Status Semantic, bukan Branding */}
                     <span
                       className={`px-2 py-1 text-xs font-semibold rounded-full ${
                         frame.is_active

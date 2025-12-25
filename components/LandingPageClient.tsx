@@ -73,6 +73,7 @@ export default function LandingPageClient({ defaultEvent }: LandingClientProps) 
             Admin Access
           </button>
         </Link>
+
       </nav>
 
       {/* --- HERO SECTION --- */}

@@ -2,7 +2,7 @@
 'use client';
 
 import { useState } from 'react';
-import { updateEvent } from '@/lib/actions';
+import { updateEvent } from '@/lib/actions/events';
 import toast from 'react-hot-toast';
 
 // Helper untuk format tanggal dari ISO DB ke value input datetime-local
