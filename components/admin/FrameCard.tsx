@@ -1,18 +1,19 @@
-// components/admin/FrameCard.tsx
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Frame } from '@/types';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { formatDate } from '@/lib/utils';
+import { supabase } from '@/lib/supabase'; // Pastikan import supabase
+import { LayoutGrid } from 'lucide-react'; // Opsional untuk icon
 import toast from 'react-hot-toast';
 
 interface FrameCardProps {
   frame: Frame;
   onUpdate: (id: string, updates: Partial<Frame>) => Promise<void>;
-  onDelete:  (id: string) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
 }
 
 export const FrameCard: React.FC<FrameCardProps> = ({ frame, onUpdate, onDelete }) => {
@@ -20,6 +21,23 @@ export const FrameCard: React.FC<FrameCardProps> = ({ frame, onUpdate, onDelete 
   const [editName, setEditName] = useState(frame.name);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [loading, setLoading] = useState(false);
+  
+  // State baru untuk dropdown event
+  const [events, setEvents] = useState<any[]>([]);
+  const [updatingEvent, setUpdatingEvent] = useState(false);
+
+  // Ambil data event aktif saat mount
+  useEffect(() => {
+    const fetchEvents = async () => {
+      const { data } = await supabase
+        .from('events')
+        .select('id, name')
+        .eq('is_active', true)
+        .order('name', { ascending: true });
+      if (data) setEvents(data);
+    };
+    fetchEvents();
+  }, []);
 
   const handleToggleActive = async () => {
     setLoading(true);
@@ -35,7 +53,7 @@ export const FrameCard: React.FC<FrameCardProps> = ({ frame, onUpdate, onDelete 
   };
 
   const handleSaveName = async () => {
-    if (! editName.trim()) {
+    if (!editName.trim()) {
       toast.error('Frame name cannot be empty');
       return;
     }
@@ -47,14 +65,27 @@ export const FrameCard: React.FC<FrameCardProps> = ({ frame, onUpdate, onDelete 
 
     setLoading(true);
     try {
-      await onUpdate(frame.id, { name: editName. trim() });
+      await onUpdate(frame.id, { name: editName.trim() });
       toast.success('Frame name updated successfully');
       setIsEditing(false);
     } catch (error) {
       console.error('Error updating frame:', error);
-      toast.error(error instanceof Error ? error.message :  'Failed to update frame name');
+      toast.error(error instanceof Error ? error.message : 'Failed to update frame name');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUpdateEventScope = async (eventId: string | null) => {
+    setUpdatingEvent(true);
+    try {
+      // Logic: Menggunakan onUpdate props yang sudah ada untuk update event_id
+      await onUpdate(frame.id, { event_id: eventId });
+      toast.success(eventId ? 'Frame restricted to specific event' : 'Frame set to all events');
+    } catch (error) {
+      toast.error('Failed to update event scope');
+    } finally {
+      setUpdatingEvent(false);
     }
   };
 
@@ -81,13 +112,13 @@ export const FrameCard: React.FC<FrameCardProps> = ({ frame, onUpdate, onDelete 
       <Card hover className="overflow-hidden">
         {/* Frame Image - FIXED: Support both portrait AND landscape frames */}
         <div className="relative w-full bg-gray-100 p-2 flex items-center justify-center" style={{ minHeight: '150px' }}>
-            <img
-                src={ frame.cloudinary_url}
-                alt={frame.name}
-                className="max-w-full h-auto object-contain"
-                style={{ maxHeight:  '200px', maxWidth: '75px' }} 
-            />
-          
+          <img
+            src={frame.cloudinary_url}
+            alt={frame.name}
+            className="max-w-full h-auto object-contain"
+            style={{ maxHeight: '200px', maxWidth: '75px' }}
+          />
+
           {/* Status Badge */}
           <div className="absolute top-2 right-2">
             <span
@@ -163,8 +194,32 @@ export const FrameCard: React.FC<FrameCardProps> = ({ frame, onUpdate, onDelete 
             </div>
           )}
 
+          {/* DROPWARD EVENT ASSIGNER (FITUR BARU) */}
+          {!isEditing && (
+            <div className="pt-2 border-t border-gray-100">
+              <label className="text-[10px] font-bold uppercase text-gray-400 mb-1 block flex items-center gap-1">
+                <LayoutGrid size={12} /> Tampilkan di Event:
+              </label>
+              <select
+                className="w-full px-2 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                value={frame.event_id || "all"}
+                disabled={updatingEvent || loading}
+                onChange={(e) => handleUpdateEventScope(e.target.value === "all" ? null : e.target.value)}
+              >
+                <option value="all">🌍 Semua Event (Public)</option>
+                <optgroup label="Event Aktif">
+                  {events.map((ev) => (
+                    <option key={ev.id} value={ev.id}>
+                      📍 {ev.name}
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
+            </div>
+          )}
+
           {/* Actions */}
-          {! isEditing && (
+          {!isEditing && (
             <div className="flex gap-2 pt-2 border-t border-gray-200">
               <Button
                 size="sm"
@@ -202,7 +257,7 @@ export const FrameCard: React.FC<FrameCardProps> = ({ frame, onUpdate, onDelete 
         onClose={() => setShowDeleteDialog(false)}
         onConfirm={handleDelete}
         title="Delete Frame"
-        message={`Are you sure you want to delete "${frame.name}"?  This action cannot be undone.`}
+        message={`Are you sure you want to delete "${frame.name}"? This action cannot be undone.`}
         confirmText="Delete"
         cancelText="Cancel"
         variant="danger"

@@ -6,6 +6,7 @@ import { activateEvent } from '@/lib/actions/events';
 import { Button } from '@/components/ui/Button';
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 
 // Import komponen baru
 import EditEventForm from './EditEventForm';
@@ -15,18 +16,29 @@ export default function EventActions({ event }: { event: any }) {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const handleActivate = async () => {
-    if (event.is_active) return; // Sudah aktif
+    const handleActivate = async () => {
+    // Ganti logika: Sekarang kita bisa mengaktifkan atau menonaktifkan secara bebas
+    const actionText = event.is_active ? 'Nonaktifkan' : 'Aktifkan';
     
-    // Konfirmasi dulu biar gak kepencet
-    if(!confirm(`Aktifkan event "${event.name}"? Event lain akan dinonaktifkan.`)) return;
+    if(!confirm(`${actionText} event "${event.name}"?`)) return;
 
     setLoading(true);
     try {
-      await activateEvent(event.id);
-      toast.success(`Event ${event.name} diaktifkan!`);
+      // Kita panggil fungsi update status biasa, bukan fungsi "global reset"
+      // Ganti activateEvent dengan logika update kolom is_active secara mandiri
+      const { error } = await supabase
+        .from('events')
+        .update({ is_active: !event.is_active })
+        .eq('id', event.id);
+
+      if (error) throw error;
+
+      toast.success(`Event ${event.name} berhasil ${!event.is_active ? 'diaktifkan' : 'dinonaktifkan'}!`);
+      
+      // Pastikan Anda melakukan refresh data atau mutasi state di sini agar UI terupdate
     } catch (e) {
-      toast.error('Gagal mengaktifkan event.');
+      console.error(e);
+      toast.error(`Gagal ${actionText.toLowerCase()} event.`);
     } finally {
       setLoading(false);
     }

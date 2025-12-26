@@ -1,13 +1,11 @@
-// components/LandingPageClient.tsx
 'use client';
 
-// ✅ TAMBAHKAN IMPORT useCallback
 import React, { useState, useCallback } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import EventAccessModal from '@/components/EventAccessModal';
-import { Event } from '@/types'; 
+import toast from 'react-hot-toast';
 
-// --- KOMPONEN IKON (Tetap Ada) ---
+// --- KOMPONEN IKON ---
 const CameraIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
 );
@@ -26,30 +24,42 @@ interface LandingClientProps {
 }
 
 export default function LandingPageClient({ defaultEvent }: LandingClientProps) {
+  const router = useRouter();
   const [activeEvent, setActiveEvent] = useState<any | null>(defaultEvent);
   const [isUnlocked, setIsUnlocked] = useState(false);
 
-  // ✅ PERBAIKAN: Gunakan useCallback untuk membungkus fungsi ini
-  // Ini mencegah fungsi dibuat ulang setiap kali render, yang menyebabkan infinite loop di useEffect child
-  const handleUnlock = useCallback((eventName: string) => {
+  // Callback saat modal berhasil unlock
+  const handleUnlock = useCallback((eventData: any) => {
+    console.log("Data Event Diterima di Landing:", eventData);
     setIsUnlocked(true);
-    setActiveEvent((prev: any) => ({
-      ...prev,
-      name: eventName
-    }));
-  }, []); // Dependency array kosong artinya fungsi ini dibuat sekali saja selamanya
+    setActiveEvent(eventData);
+
+    if (eventData?.id) {
+        localStorage.setItem('active_event_id', eventData.id);
+        // Trigger event agar ThemeProvider langsung update warnanya
+        window.dispatchEvent(new Event('event_unlocked'));
+    }
+  }, []); 
+
+  const handleStart = () => {
+    if (!isUnlocked) return;
+    if (activeEvent && activeEvent.id) {
+        router.push(`/camera?eventId=${activeEvent.id}`);
+    } else {
+        toast.error("Gagal memuat ID Event. Silakan refresh halaman.");
+    }
+  };
 
   const titleText = activeEvent?.name || "Capture Moments,\nCreate Memories.";
-  
   const subtitleText = activeEvent?.name 
     ? `Welcome to ${activeEvent.name}. Tap start to capture your moment!` 
-    : "The ultimate digital photobooth experience for your weddings, parties, and corporate events. Simple, fast, and instant sharing.";
-  
+    : "The ultimate digital photobooth experience for your weddings, parties, and corporate events.";
   const badgeText = activeEvent?.name ? `Event Live: ${activeEvent.name}` : "Ready to Capture";
 
   return (
     <div className="min-h-screen w-full bg-customBg relative overflow-hidden flex flex-col font-sans text-foreground transition-colors duration-500">
       
+
       {/* MODAL SECURITY */}
       <EventAccessModal onUnlock={handleUnlock} />
 
@@ -58,30 +68,28 @@ export default function LandingPageClient({ defaultEvent }: LandingClientProps) 
       <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-primary rounded-full blur-[120px] pointer-events-none opacity-20" />
 
       {/* --- NAVBAR --- */}
-      <nav className="w-full px-6 py-6 flex justify-between items-center z-10">
+      <nav className="w-full px-6 py-6 flex justify-between items-center z-10 ">
         <div className="flex items-center gap-2">
-          {/* LOGO */}
           <div className="w-8 h-8 bg-gradient-to-tr from-primary to-secondary rounded-lg flex items-center justify-center shadow-lg shadow-primary/20 text-customBg">
             <CameraIcon />
           </div>
           <span className="text-xl font-bold tracking-tight">SnapBooth<span className="text-primary">.</span></span>
         </div>
         
-        <Link href="/admin/login">
-          <button className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-foreground opacity-60 hover:opacity-100 transition-all hover:bg-foreground/5 rounded-full cursor-pointer">
-            <LockIcon />
-            Admin Access
-          </button>
-        </Link>
-
+        <button 
+          onClick={() => router.push('/admin/login')}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-foreground opacity-60 hover:opacity-100 transition-all hover:bg-foreground/5 rounded-full cursor-pointer"
+        >
+          <LockIcon />
+          Admin Access
+        </button>
       </nav>
 
       {/* --- HERO SECTION --- */}
-      <main className="flex-1 flex flex-col items-center justify-center text-center px-4 z-10 mt-8 mb-16">
+      <main className="flex-1 flex flex-col items-center justify-center text-center px-4 z-10 mb-16">
         
         {/* Badge Status */}
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-primary/20 text-primary text-xs font-semibold uppercase tracking-wider mb-6 animate-in fade-in slide-in-from-bottom-4 duration-700 relative overflow-hidden">
-          <div className="absolute inset-0 bg-primary opacity-10 pointer-events-none"></div>
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-primary/20 text-primary text-xs font-semibold uppercase tracking-wider mb-6 animate-in fade-in slide-in-from-bottom-4 duration-700 relative overflow-hidden bg-primary/5">
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
@@ -101,21 +109,20 @@ export default function LandingPageClient({ defaultEvent }: LandingClientProps) 
 
         {/* Tombol Mulai */}
         <div className="animate-in fade-in zoom-in duration-700 delay-200">
-          <Link href={isUnlocked ? "/camera" : "#"}>
-            <button 
-                disabled={!isUnlocked}
-                className={`group relative px-8 py-4 bg-foreground text-customBg rounded-full font-bold text-lg shadow-2xl transition-all transform overflow-hidden
-                ${isUnlocked ? 'hover:shadow-primary/40 hover:scale-105 active:scale-95 cursor-pointer' : 'opacity-50 cursor-not-allowed grayscale'}
-                `}
-            >
-              <span className="absolute inset-0 w-full h-full rounded-full bg-gradient-to-r from-primary via-secondary to-primary opacity-0 group-hover:opacity-20 transition-opacity" />
-              <div className="flex items-center gap-3 relative z-10">
-                <CameraIcon />
-                {isUnlocked ? "Start Photobooth" : "Locked"}
-                {isUnlocked && <svg className="w-5 h-5 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>}
-              </div>
-            </button>
-          </Link>
+          <button 
+              onClick={handleStart}
+              disabled={!isUnlocked}
+              className={`group relative px-8 py-4 bg-foreground text-customBg rounded-full font-bold text-lg shadow-2xl transition-all transform overflow-hidden
+              ${isUnlocked ? 'hover:shadow-primary/40 hover:scale-105 active:scale-95 cursor-pointer' : 'opacity-50 cursor-not-allowed grayscale'}
+              `}
+          >
+            <span className="absolute inset-0 w-full h-full rounded-full bg-gradient-to-r from-primary via-secondary to-primary opacity-0 group-hover:opacity-20 transition-opacity" />
+            <div className="flex items-center gap-3 relative z-10">
+              <CameraIcon />
+              {isUnlocked ? "Start Photobooth" : "Locked"}
+              {isUnlocked && <svg className="w-5 h-5 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>}
+            </div>
+          </button>
         </div>
 
       </main>

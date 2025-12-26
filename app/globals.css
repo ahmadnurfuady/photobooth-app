@@ -5,13 +5,16 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
-}
 
-/* 👇 HAPUS BAGIAN @media (prefers-color-scheme: dark) JIKA ADA */
+  /* ✅ WAJIB DITAMBAHKAN: Nilai Default */
+  /* Agar kalau belum login event, warnanya tidak rusak/hilang */
+  --primary-color: #8b5cf6;  /* Default Ungu */
+  --secondary-color: #ec4899; /* Default Pink */
+  --bg-color: #000000;       /* Default Hitam */
+}
 
 @layer base {
   body {
-    /* Gunakan variable tema kita */
     @apply bg-customBg text-foreground;
   }
 }

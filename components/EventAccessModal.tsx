@@ -5,7 +5,8 @@ import { verifyEventAccess } from '@/lib/actions/eventAccess';
 import toast from 'react-hot-toast';
 
 interface EventAccessModalProps {
-  onUnlock: (eventName: string) => void;
+  // ✅ UPDATE: Ubah tipe data agar menerima object, bukan cuma string nama
+  onUnlock: (eventData: any) => void;
 }
 
 export default function EventAccessModal({ onUnlock }: EventAccessModalProps) {
@@ -25,28 +26,34 @@ export default function EventAccessModal({ onUnlock }: EventAccessModalProps) {
           
           // 1. Cek Client Side (Tanggal)
           if (new Date(parsed.expiry) <= new Date()) {
-             throw new Error('Expired');
+              throw new Error('Expired');
           }
 
           // 2. ✅ CEK SERVER SIDE (Kuota & Status Aktif)
           // Kita butuh kode aksesnya. Kalau tidak disimpan sebelumnya, kita harus minta user input lagi.
           // Jadi kita tambahkan penyimpanan 'code' di localStorage di bawah nanti.
           if (parsed.code) {
-             const result = await verifyEventAccess(parsed.code);
-             
-             if (result.success) {
+              const result = await verifyEventAccess(parsed.code);
+              
+              if (result.success) {
                 setIsOpen(false);
-                onUnlock(result.eventName!);
-             } else {
+                
+                // ✅ FIX: Kirim object lengkap (ID & Nama) agar URL tidak error
+                onUnlock({ 
+                    id: result.eventId || parsed.id, 
+                    name: result.eventName 
+                });
+
+              } else {
                 // Kalau kuota habis saat re-check, hapus sesi dan kunci layar
                 toast.error(result.message || 'Sesi berakhir.');
                 localStorage.removeItem('active_event_session');
                 setIsOpen(true);
-             }
+              }
           } else {
-             // Kalau data lama tidak ada kodenya, paksa login ulang
-             localStorage.removeItem('active_event_session');
-             setIsOpen(true);
+              // Kalau data lama tidak ada kodenya, paksa login ulang
+              localStorage.removeItem('active_event_session');
+              setIsOpen(true);
           }
 
         } catch (e) {
@@ -82,7 +89,13 @@ export default function EventAccessModal({ onUnlock }: EventAccessModalProps) {
         localStorage.setItem('active_event_session', JSON.stringify(sessionData));
         
         setIsOpen(false);
-        onUnlock(result.eventName);
+        
+        // ✅ FIX: Kirim object lengkap (ID & Nama) ke LandingPageClient
+        onUnlock({ 
+            id: result.eventId, 
+            name: result.eventName 
+        });
+
       } else {
         toast.error(result.message || 'Access Denied');
       }
@@ -168,9 +181,9 @@ export default function EventAccessModal({ onUnlock }: EventAccessModalProps) {
         </form>
         
         <div className="mt-8 flex justify-center">
-             <div className="px-4 py-1 rounded-full border border-white/5 bg-white/5 text-[10px] text-gray-500 uppercase tracking-widest">
+              <div className="px-4 py-1 rounded-full border border-white/5 bg-white/5 text-[10px] text-gray-500 uppercase tracking-widest">
                 Protected by SnapBooth Engine
-             </div>
+              </div>
         </div>
       </div>
     </div>

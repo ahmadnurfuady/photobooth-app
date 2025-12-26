@@ -3,9 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sessionQueries } from '@/lib/supabase';
 import { uploadToCloudinary } from '@/lib/cloudinary';
 import { v4 as uuidv4 } from 'uuid';
-import { createClient } from '@supabase/supabase-js'; // Import client untuk upsert manual jika diperlukan
+import { createClient } from '@supabase/supabase-js'; 
 
-// Konfigurasi Supabase Client untuk akses langsung upsert jika sessionQueries tidak support
+// Konfigurasi Supabase Client
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -16,25 +16,31 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const {
-      id, // ✅ TERIMA ID DARI FRONTEND (Agar QR Code Match)
+      id, 
+      event_id, // ✅ TERIMA EVENT ID DARI FRONTEND (Agar masuk ke event yang benar)
       frame_id,
-      photos, // Array of base64 images
-      composite_photo, // Photo strip with frame
-      gif, // GIF animation
+      photos, 
+      composite_photo, 
+      gif, 
     } = body;
 
-    // Sebelum simpan, cari dulu event mana yang sedang is_active = true
-    const { data: activeEvent } = await supabaseAdmin
-      .from('events')
-      .select('id')
-      .eq('is_active', true)
-      .single();
+    // --- LOGIKA PENENTUAN EVENT ID (DIPERBARUI) ---
+    // 1. Prioritaskan ID yang dikirim dari Frontend (karena user sudah login ke event spesifik)
+    let targetEventId = event_id;
 
-    const eventId = activeEvent ? activeEvent.id : null;
+    // 2. Jika Frontend tidak kirim ID (misal akses langsung/legacy), cari event aktif di DB
+    if (!targetEventId) {
+        const { data: activeEvent } = await supabaseAdmin
+          .from('events')
+          .select('id')
+          .eq('is_active', true)
+          .single();
+        
+        targetEventId = activeEvent ? activeEvent.id : null;
+    }
     // -------------------------------------
 
     // 1. Validation
-    // Backend mewajibkan semua data ini ada.
     if (!frame_id || !photos || !composite_photo || !gif) {
       console.error("❌ [API] Missing Fields:", { 
         hasId: !!id,
@@ -49,11 +55,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ✅ GUNAKAN ID DARI FRONTEND JIKA ADA, KALAU TIDAK ADA BARU GENERATE
+    // ✅ GUNAKAN ID DARI FRONTEND JIKA ADA
     const sessionId = id || uuidv4();
     const timestamp = Date.now();
 
-    console.log(`🚀 Starting processing for session: ${sessionId}`);
+    console.log(`🚀 Starting processing for session: ${sessionId} (Event: ${targetEventId})`);
 
     // 2. Upload individual photos to Cloudinary
     let uploadedPhotos = [];
@@ -61,7 +67,7 @@ export async function POST(request: NextRequest) {
       uploadedPhotos = await Promise.all(
         photos.map(async (photo: string, index: number) => {
           const result = await uploadToCloudinary(photo, {
-            folder: `photobooth/sessions/${sessionId}`,
+            folder: `photobooth/sessions/${sessionId}`, // Folder tetap per sesi
             public_id: `photo_${index + 1}_${timestamp}`,
           });
           return {
@@ -98,14 +104,13 @@ export async function POST(request: NextRequest) {
     let gifResult;
     try {
       if (!gif.startsWith('data:image/gif')) {
-         // Fallback ringan jika header salah, tapi sebaiknya validasi di frontend
          console.warn("Warning: GIF data header mismatch");
       }
       
       gifResult = await uploadToCloudinary(gif, {
         folder: `photobooth/sessions/${sessionId}`,
         public_id: `animation_${timestamp}`,
-        resource_type: 'image', // Cloudinary auto-detects GIFs as images usually
+        resource_type: 'image', 
       });
     } catch (uploadError: any) {
       console.error('Failed to upload GIF:', uploadError);
@@ -115,18 +120,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 5. Save session to Supabase (MENGGUNAKAN UPSERT UNTUK MENCEGAH DUPLICATE KEY)
-    // Kita menggunakan upsert agar jika ID sudah ada (akibat sync ulang), data akan diperbarui bukan error.
+    // 5. Save session to Supabase
     const { data, error } = await supabaseAdmin
-      .from('photo_sessions') // Ganti dengan 'photo_sessions' jika itu nama tabel Anda di DB
+      .from('photo_sessions') 
       .upsert({
-        id: sessionId, // ✅ Insert/Update ID spesifik agar QR Code valid
+        id: sessionId, 
         frame_id,
-        event_id: eventId, // Simpan event_id yang aktif saat itu
-        photos: uploadedPhotos, // Simpan array JSON URL foto
-        composite_url: compositeResult.secure_url, // Sesuaikan nama kolom di DB Anda (composite_url atau composite_photo)
+        event_id: targetEventId, // ✅ Gunakan ID hasil logika prioritas di atas
+        photos: uploadedPhotos, 
+        composite_url: compositeResult.secure_url, 
         composite_public_id: compositeResult.public_id,
-        gif_url: gifResult.secure_url, // Sesuaikan nama kolom di DB Anda (gif_url atau gif)
+        gif_url: gifResult.secure_url, 
         gif_public_id: gifResult.public_id,
         photo_count: photos.length,
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
@@ -134,13 +138,12 @@ export async function POST(request: NextRequest) {
         deleted_at: null,
         created_at: new Date().toISOString(),
       }, {
-        onConflict: 'id' // Jika bentrok pada kolom ID, lakukan update
+        onConflict: 'id' 
       })
       .select()
       .single();
 
     if (error) {
-      // LOGGING PENTING: Menampilkan detail error Supabase (misal: RLS policy violation)
       console.error('❌ Supabase DB Error:', JSON.stringify(error, null, 2));
       return NextResponse.json(
         { success: false, error: 'Failed to save session to database', details: error },
@@ -151,7 +154,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        session_id: sessionId, // Mengembalikan ID yang konsisten
+        session_id: sessionId, 
         ...data,
       },
       message: 'Session created successfully',

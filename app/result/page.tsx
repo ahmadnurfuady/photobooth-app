@@ -1,17 +1,19 @@
+//app/result/page.tsx
+
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Frame, PhotoSession } from '@/types';
 import { Button } from '@/components/ui/Button';
-import { QRCodeCanvas } from 'qrcode.react';
+import { QRCodeCanvas } from 'qrcode.react'; // Pastikan install: npm install qrcode.react
 import toast from 'react-hot-toast';
 import Image from 'next/image';
 
 // ✅ IMPORT CUSTOM LOGGER (Sistem Monitoring Baru)
 import { logger } from '@/lib/Logger'; 
 
-// ✅ IMPORT SENTRY (Tetap dipertahankan sesuai kode asli Anda)
+// ✅ IMPORT SENTRY (Tetap dipertahankan)
 import { captureSystemError } from '@/src/utils/errorHandler'; 
 
 import {
@@ -20,6 +22,7 @@ import {
   downloadBase64Image,
 } from '@/lib/imageProcessing';
 
+// Helper Generate UUID
 const generateSessionId = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID();
@@ -61,6 +64,7 @@ export default function ResultPage() {
     // ✅ LOGGER: Track Session Start
     logger.info('SESSION_INIT', 'User arrived at Result Page', { sessionId: newId });
     
+    // Generate URL download lokal (untuk QR Code sementara)
     const appUrl = typeof window !== 'undefined' ? window.location.origin : '';
     setDownloadUrl(`${appUrl}/download/${newId}`);
 
@@ -181,8 +185,13 @@ export default function ResultPage() {
         setStatus('uploading');
         setProgressMessage('Syncing to cloud... ☁️');
         
+        // 🔑 PERBAIKAN PENTING: Ambil Event ID dari LocalStorage
+        // Ini memastikan foto terhubung ke event yang sedang aktif
+        const activeEventId = localStorage.getItem('active_event_id');
+
         const payload = {
             id: currentSessionId,
+            event_id: activeEventId, // ✅ Tambahkan Event ID ke payload
             frame_id: frame.id,
             photos: photos,
             composite_photo: finalComposite, 
@@ -193,6 +202,8 @@ export default function ResultPage() {
         const responseData = await logger.monitorOperation(
             'UPLOAD_SESSION_API',
             async () => {
+                // Perhatikan: Endpoint diganti ke /api/upload-session jika ingin sesuai diskusi sebelumnya,
+                // tapi jika backend Anda pakai /api/sessions, biarkan begini.
                 const response = await fetch('/api/sessions', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -205,11 +216,16 @@ export default function ResultPage() {
                 }
                 return await response.json();
             },
-            { sessionId: currentSessionId }
+            { sessionId: currentSessionId, eventId: activeEventId }
         );
 
         setSession(responseData.data);
         
+        // Update URL download jika server mengembalikan URL publik (Cloudinary)
+        if (responseData.data?.composite_url) {
+            // setDownloadUrl(responseData.data.composite_url); // Opsional: Direct link ke gambar
+        }
+
         setStatus('complete');
         setProgressMessage('Ready!');
         toast.success('Upload complete!');
@@ -264,8 +280,11 @@ export default function ResultPage() {
 
         console.warn("Upload failed, attempting to save to queue...");
         
+        const activeEventId = localStorage.getItem('active_event_id');
+
         const payloadToSave = {
             id: currentSessionId,
+            event_id: activeEventId, // ✅ Simpan Event ID juga saat offline
             frame_id: frame.id,
             photos: photos, 
             composite_photo: finalComposite,
@@ -275,6 +294,7 @@ export default function ResultPage() {
         try {
             const currentQueue = JSON.parse(localStorage.getItem('pending_uploads') || '[]');
             
+            // Batasi antrian offline agar localStorage tidak meledak (opsional, diset 2)
             if (currentQueue.length >= 2) currentQueue.shift();
 
             currentQueue.push(payloadToSave);
@@ -305,6 +325,7 @@ export default function ResultPage() {
         }
       }
       
+      // Bersihkan Session Storage agar tidak double process jika refresh
       sessionStorage.removeItem('selectedFrame');
       sessionStorage.removeItem('capturedPhotos');
 
@@ -414,12 +435,12 @@ export default function ResultPage() {
     >
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
          <div 
-            className="absolute top-[-10%] left-[-10%] w-[600px] h-[600px] rounded-full blur-[120px]"
-            style={{ backgroundColor: 'var(--primary-color)', opacity: 0.1 }}
+           className="absolute top-[-10%] left-[-10%] w-[600px] h-[600px] rounded-full blur-[120px]"
+           style={{ backgroundColor: 'var(--primary-color)', opacity: 0.1 }}
          />
          <div 
-            className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] rounded-full blur-[120px]"
-            style={{ backgroundColor: 'var(--secondary-color)', opacity: 0.1 }}
+           className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] rounded-full blur-[120px]"
+           style={{ backgroundColor: 'var(--secondary-color)', opacity: 0.1 }}
          />
       </div>
 
@@ -450,6 +471,7 @@ export default function ResultPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
+          {/* KOLOM KIRI: HASIL PREVIEW */}
           <div className="lg:col-span-7 space-y-6">
             <div 
                 className="rounded-3xl p-6 backdrop-blur-md shadow-2xl border"
@@ -516,15 +538,16 @@ export default function ResultPage() {
                   {gifUrl && <button onClick={handleDownloadGif} className="text-xs hover:opacity-80" style={{ color: 'var(--primary-color)' }}>Save GIF</button>}
                 </div>
                 {gifUrl ? (
-                   <div className="relative w-full aspect-video bg-black/20 rounded-lg overflow-hidden border border-white/10 animate-in fade-in">
-                      <Image src={gifUrl} alt="GIF" fill className="object-contain" unoptimized />
-                   </div>
+                    <div className="relative w-full aspect-video bg-black/20 rounded-lg overflow-hidden border border-white/10 animate-in fade-in">
+                       <Image src={gifUrl} alt="GIF" fill className="object-contain" unoptimized />
+                    </div>
                 ) : (
-                   <div className="w-full aspect-video bg-black/20 rounded-lg flex items-center justify-center text-xs opacity-50 animate-pulse">Creating...</div>
+                    <div className="w-full aspect-video bg-black/20 rounded-lg flex items-center justify-center text-xs opacity-50 animate-pulse">Creating...</div>
                 )}
             </div>
           </div>
 
+          {/* KOLOM KANAN: STATUS & QR */}
           <div className="lg:col-span-5 space-y-6">
             <div 
                 className="rounded-3xl p-8 border shadow-2xl text-center relative overflow-hidden"
@@ -537,20 +560,20 @@ export default function ResultPage() {
               
               {status === 'offline_saved' && (
                 <div className="mb-4 p-2 bg-yellow-500/20 border border-yellow-500/50 rounded-lg animate-in fade-in zoom-in">
-                   <p className="text-[10px] text-yellow-500 font-bold uppercase tracking-tight">
+                    <p className="text-[10px] text-yellow-500 font-bold uppercase tracking-tight">
                       ⚠️ Offline Mode: Simpan Link ini!
-                   </p>
-                   <p className="text-[9px] opacity-70">
+                    </p>
+                    <p className="text-[9px] opacity-70">
                       Foto akan muncul otomatis setelah booth online kembali.
-                   </p>
+                    </p>
                 </div>
               )}
 
               <div className={`bg-white p-4 rounded-2xl inline-block shadow-lg mb-6 transition-all duration-700 ${status === 'offline_saved' ? 'grayscale-[0.5] opacity-90' : ''}`}>
                 {downloadUrl ? (
-                   <QRCodeCanvas value={downloadUrl} size={200} level="H" />
+                    <QRCodeCanvas value={downloadUrl} size={200} level="H" />
                 ) : (
-                   <div className="w-[200px] h-[200px] bg-gray-200 animate-pulse rounded" />
+                    <div className="w-[200px] h-[200px] bg-gray-200 animate-pulse rounded" />
                 )}
               </div>
 

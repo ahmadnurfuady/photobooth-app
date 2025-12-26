@@ -4,6 +4,30 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { revalidatePath } from 'next/cache';
 
+// ✅ DEFINISI TIPE DATA (INTERFACE)
+// Agar backend mengenali parameter warna yang dikirim frontend
+interface CreateEventParams {
+  name: string;
+  accessCode: string;
+  maxSessions: number;
+  expiresAt: string | null;
+  primaryColor?: string;
+  secondaryColor?: string;
+  backgroundColor?: string; // Baru
+  textColor?: string;       // Baru
+}
+
+interface UpdateEventParams {
+  name: string;
+  accessCode: string;
+  maxSessions: number;
+  expiresAt: string | null;
+  primaryColor?: string;
+  secondaryColor?: string;
+  backgroundColor?: string; // Baru
+  textColor?: string;       // Baru
+}
+
 // 1. Ambil Semua Event (Dengan Auto-Expire Check)
 export async function getEvents() {
   try {
@@ -44,13 +68,18 @@ export async function getEvents() {
   }
 }
 
-// 2. Buat Event Baru (Lengkap dengan Kode, Limit, Expire)
-export async function createEvent(
-  name: string, 
-  accessCode: string, 
-  maxSessions: number, 
-  expiresAt: string | null
-) {
+// 2. Buat Event Baru (Lengkap dengan Kode, Limit, Expire, & Warna)
+// ✅ Diupdate menggunakan destructuring object agar sesuai dengan frontend modern
+export async function createEvent({
+  name, 
+  accessCode, 
+  maxSessions, 
+  expiresAt,
+  primaryColor,
+  secondaryColor,
+  backgroundColor,
+  textColor
+}: CreateEventParams) {
   try {
     // Pastikan kode akses unik (walaupun di DB sudah ada constraint unique, double check di sini bagus)
     const { data: existing } = await supabaseAdmin
@@ -70,7 +99,12 @@ export async function createEvent(
         access_code: accessCode,       
         max_sessions: maxSessions,     
         expires_at: expiresAt || null, 
-        is_active: false // Default tidak aktif
+        is_active: false, // Default tidak aktif
+        // ✅ Mapping Warna ke Database (Snake Case)
+        primary_color: primaryColor || '#3b82f6',
+        secondary_color: secondaryColor || '#a855f7',
+        background_color: backgroundColor || '#0f172a', // Default Dark Blue
+        text_color: textColor || '#f8fafc',             // Default Putih
       }); 
 
     if (error) throw new Error(error.message);
@@ -159,16 +193,13 @@ export async function deleteEvent(id: string) {
 }
 
 // 7. Update Event (Edit)
+// ✅ Diupdate menerima parameter UpdateEventParams
 export async function updateEvent(
   id: string,
-  data: {
-    name: string;
-    accessCode: string;
-    maxSessions: number;
-    expiresAt: string | null;
-  }
+  data: UpdateEventParams
 ) {
   try {
+    console.log("🔥 [DEBUG] Data dari Frontend:", data);
     // Cek apakah kode akses baru bentrok dengan event LAIN (selain event ini sendiri)
     const { data: existing } = await supabaseAdmin
         .from('events')
@@ -181,14 +212,27 @@ export async function updateEvent(
         throw new Error("Kode Akses sudah digunakan event lain.");
     }
 
-    const { error } = await supabaseAdmin
-      .from('events')
-      .update({
+    // Persiapkan payload update
+    const payload: any = {
         name: data.name,
         access_code: data.accessCode,
         max_sessions: data.maxSessions,
         expires_at: data.expiresAt,
-      })
+        // ✅ Update Warna
+        primary_color: data.primaryColor,
+        secondary_color: data.secondaryColor,
+        background_color: data.backgroundColor,
+        text_color: data.textColor,
+    };
+
+    // 👇 2. PASANG LOG INI UNTUK CEK APA YANG DIKIRIM KE DB
+    console.log("📦 [DEBUG] Payload ke DB:", payload);
+    // Bersihkan field undefined agar tidak menimpa data lama jadi null/kosong
+    Object.keys(payload).forEach(key => payload[key] === undefined && delete payload[key]);
+
+    const { error } = await supabaseAdmin
+      .from('events')
+      .update(payload)
       .eq('id', id);
 
     if (error) throw new Error(error.message);

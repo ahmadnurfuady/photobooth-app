@@ -35,6 +35,7 @@ export interface Frame {
   frame_config?: FrameConfig | null;  // Preset configuration with locked aspect ratio
   created_at: string;
   updated_at: string;
+  event_id?: string | null;
 }
 
 // Photo data in session

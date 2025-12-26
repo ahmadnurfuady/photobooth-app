@@ -5,6 +5,10 @@ import { Toaster } from 'react-hot-toast';
 import './globals.css';
 import React from 'react';
 
+import EventThemeProvider from '@/components/EventThemeProvider';
+
+import { BoothIdentityOverlay } from '@/components/booth/BoothIdentityOverlay';
+
 // ✅ Import Sentry Initializer (Agar Sentry jalan di client-side)
 import { SentryInitializer } from '@/components/providers/SentryInitializer';
 
@@ -66,8 +70,12 @@ export default function RootLayout({
               
               {/* Div font Inter membungkus konten aplikasi */}
               <div className={inter.className}>
+                <EventThemeProvider>  
                 {children}
-                
+                </EventThemeProvider>
+                {/* ✅ PASANG DI SINI: Akan muncul di atas konten apa pun */}
+                <BoothIdentityOverlay />
+
                 {/* Config Toaster Lengkap (Sesuai Permintaan: Tidak Diringkas) */}
                 <Toaster
                   position="top-right"

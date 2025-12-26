@@ -32,7 +32,13 @@ class TelemetryService {
 
   public track(event: TelemetryEvent) {
     const { category, action, message, severity, metadata, notifyUser } = event;
-    const fullMessage = `[${category}:${action}] ${message}`;
+    
+    // Pastikan message dikonversi ke string jika tidak sengaja menerima object
+    const cleanMessage = typeof message === 'object' 
+      ? (JSON.stringify(message)) 
+      : String(message);
+
+    const fullMessage = `[${category}:${action}] ${cleanMessage}`;
 
     // 1. Console Log (Dev Only)
     if (MONITORING_CONFIG.features.enableConsoleLogs) {
@@ -42,24 +48,22 @@ class TelemetryService {
 
     // 2. Supabase Logging (Always, unless disabled)
     if (MONITORING_CONFIG.features.enableSupabaseLogs) {
-      // Kita pakai method logger yang sudah ada (batching sudah dihandle di sana)
+      // ✅ PERBAIKAN: Pastikan Error constructor menerima string, bukan [object Object]
       if (severity === 'error' || severity === 'critical') {
-        logger.error(action, new Error(message), { category, ...metadata });
+        logger.error(action, new Error(cleanMessage), { category, ...metadata });
       } else if (severity === 'warning') {
-        logger.warn(action, message, { category, ...metadata });
+        logger.warn(action, cleanMessage, { category, ...metadata });
       } else {
-        logger.info(action, message, { category, ...metadata });
+        logger.info(action, cleanMessage, { category, ...metadata });
       }
     }
 
     // 3. Sentry Tracking (Smart Filtering)
-    // Hanya kirim ke Sentry jika error/critical DAN fitur nyala
     if (
       MONITORING_CONFIG.features.enableSentry && 
       ['error', 'critical', 'fatal'].includes(severity)
     ) {
-      // Deduplication: Jangan kirim error yang sama persis dalam 5 detik
-      const errorKey = `${action}-${message}`;
+      const errorKey = `${action}-${cleanMessage}`;
       if (!this.recentErrors.has(errorKey)) {
         Sentry.withScope((scope) => {
           scope.setTag("category", category);
@@ -81,7 +85,7 @@ class TelemetryService {
 
     if (shouldNotify) {
       notificationManager.notify(action, {
-        body: message,
+        body: cleanMessage,
         severity: severity,
         category: category as any,
       });
@@ -91,12 +95,28 @@ class TelemetryService {
   // --- Helpers ---
   
   public logError(error: any, context: string, meta = {}) {
+    // Mengekstrak pesan asli dari error Supabase atau Error object
+    let extractedMessage = "Unknown Error";
+    
+    if (error instanceof Error) {
+      extractedMessage = error.message;
+    } else if (typeof error === 'object' && error !== null) {
+      // Menangani error object dari Supabase { message, details, hint, code }
+      extractedMessage = error.message || error.details || JSON.stringify(error);
+    } else {
+      extractedMessage = String(error);
+    }
+
     this.track({
       category: 'SYSTEM',
       action: context,
-      message: error instanceof Error ? error.message : String(error),
+      message: extractedMessage,
       severity: 'error',
-      metadata: { stack: error.stack, ...meta }
+      metadata: { 
+        stack: error instanceof Error ? error.stack : undefined, 
+        raw_error: error,
+        ...meta 
+      }
     });
   }
 
@@ -104,7 +124,7 @@ class TelemetryService {
     this.track({
       category: 'USER_ACTION',
       action,
-      message,
+      message: String(message),
       severity: 'info',
       metadata: meta
     });

@@ -4,7 +4,9 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { notificationManager } from '../services/NotificationManager';
 import { healthMonitor } from '../services/HealthMonitor';
-import { SystemHealthState, NotificationPreferences } from '../types/system';
+import { SystemHealthState, NotificationPreferences } from '@/types/system';
+
+import { useBooth } from '@/src/hooks/useBooth'; // Import hooknya
 
 interface SystemContextType {
   health: SystemHealthState | null;
@@ -21,6 +23,8 @@ interface SystemContextType {
 const SystemContext = createContext<SystemContextType | null>(null);
 
 export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  useBooth(); // ✅ Aktifkan di sini
+  
   const [health, setHealth] = useState<SystemHealthState | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
