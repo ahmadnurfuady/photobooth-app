@@ -2,79 +2,95 @@
 'use client';
 
 import { useState } from 'react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+// ❌ HAPUS import statis ini agar tidak berat di awal
+// import jsPDF from 'jspdf';
+// import autoTable from 'jspdf-autotable';
 import toast from 'react-hot-toast';
 
 export default function InvoiceModal({ event }: { event: any }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false); // ✅ Tambah state loading
   
-  // State form invoice (Tidak masuk database, cuma buat PDF)
   const [clientName, setClientName] = useState('');
   const [price, setPrice] = useState('');
   const [notes, setNotes] = useState('Terima kasih telah menggunakan jasa SnapBooth.');
 
-  const generatePDF = () => {
+  // ✅ Ubah jadi ASYNC function
+  const generatePDF = async () => {
     if (!clientName || !price) {
         toast.error("Nama Klien dan Harga wajib diisi!");
         return;
     }
 
-    const doc = new jsPDF();
-    
-    // 1. Header
-    doc.setFontSize(22);
-    doc.setTextColor(16, 185, 129); // Emerald Color
-    doc.text("SNAPBOOTH INVOICE", 14, 20);
-    
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text("Professional Photobooth Services", 14, 26);
-    doc.text(`Date: ${new Date().toLocaleDateString('id-ID')}`, 14, 32);
+    try {
+        setIsGenerating(true); // Mulai loading (download library)
 
-    // 2. Bill To
-    doc.setFontSize(12);
-    doc.setTextColor(0);
-    doc.text("Tagihan Kepada:", 14, 45);
-    doc.setFont("helvetica", "bold");
-    doc.text(clientName.toUpperCase(), 14, 52);
-    doc.setFont("helvetica", "normal");
+        // 🚀 INI KUNCINYA: Import Library hanya saat butuh
+        const jsPDF = (await import('jspdf')).default;
+        const autoTable = (await import('jspdf-autotable')).default;
 
-    // 3. Tabel Detail
-    autoTable(doc, {
-      startY: 60,
-      head: [['Deskripsi Layanan', 'Detail', 'Harga']],
-      body: [
-        ['Nama Event', event.name, ''],
-        ['Kode Akses Login', event.access_code, ''],
-        ['Limit Kuota Foto', event.max_sessions === 0 ? 'Unlimited' : `${event.max_sessions} Sesi`, ''],
-        ['Durasi Layanan', event.expires_at ? `Hingga ${new Date(event.expires_at).toLocaleString()}` : 'Selamanya', ''],
-        ['Paket Photobooth', 'Full Service', `Rp ${Number(price).toLocaleString('id-ID')}`],
-      ],
-      theme: 'grid',
-      headStyles: { fillColor: [16, 185, 129] },
-      columnStyles: {
-        0: { cellWidth: 60 },
-        1: { cellWidth: 80 },
-        2: { cellWidth: 40, halign: 'right', fontStyle: 'bold' },
-      }
-    });
+        const doc = new jsPDF();
+        
+        // 1. Header
+        doc.setFontSize(22);
+        doc.setTextColor(16, 185, 129); // Emerald Color
+        doc.text("SNAPBOOTH INVOICE", 14, 20);
+        
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text("Professional Photobooth Services", 14, 26);
+        doc.text(`Date: ${new Date().toLocaleDateString('id-ID')}`, 14, 32);
 
-    // 4. Total
-    const finalY = (doc as any).lastAutoTable.finalY + 10;
-    doc.setFontSize(14);
-    doc.setFont("helvetica", "bold");
-    doc.text(`TOTAL: Rp ${Number(price).toLocaleString('id-ID')}`, 195, finalY, { align: 'right' });
+        // 2. Bill To
+        doc.setFontSize(12);
+        doc.setTextColor(0);
+        doc.text("Tagihan Kepada:", 14, 45);
+        doc.setFont("helvetica", "bold");
+        doc.text(clientName.toUpperCase(), 14, 52);
+        doc.setFont("helvetica", "normal");
 
-    // 5. Footer / Notes
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "italic");
-    doc.setTextColor(100);
-    doc.text(`Catatan: ${notes}`, 14, finalY + 20);
-    
-    doc.save(`Invoice_${event.name.replace(/\s/g, '_')}.pdf`);
-    setIsOpen(false);
-    toast.success("Invoice berhasil didownload!");
+        // 3. Tabel Detail
+        autoTable(doc, {
+          startY: 60,
+          head: [['Deskripsi Layanan', 'Detail', 'Harga']],
+          body: [
+            ['Nama Event', event.name, ''],
+            ['Kode Akses Login', event.access_code, ''],
+            ['Limit Kuota Foto', event.max_sessions === 0 ? 'Unlimited' : `${event.max_sessions} Sesi`, ''],
+            ['Durasi Layanan', event.expires_at ? `Hingga ${new Date(event.expires_at).toLocaleString()}` : 'Selamanya', ''],
+            ['Paket Photobooth', 'Full Service', `Rp ${Number(price).toLocaleString('id-ID')}`],
+          ],
+          theme: 'grid',
+          headStyles: { fillColor: [16, 185, 129] },
+          columnStyles: {
+            0: { cellWidth: 60 },
+            1: { cellWidth: 80 },
+            2: { cellWidth: 40, halign: 'right', fontStyle: 'bold' },
+          }
+        });
+
+        // 4. Total
+        const finalY = (doc as any).lastAutoTable.finalY + 10;
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.text(`TOTAL: Rp ${Number(price).toLocaleString('id-ID')}`, 195, finalY, { align: 'right' });
+
+        // 5. Footer / Notes
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "italic");
+        doc.setTextColor(100);
+        doc.text(`Catatan: ${notes}`, 14, finalY + 20);
+        
+        doc.save(`Invoice_${event.name.replace(/\s/g, '_')}.pdf`);
+        setIsOpen(false);
+        toast.success("Invoice berhasil didownload!");
+
+    } catch (error) {
+        console.error("Gagal generate PDF:", error);
+        toast.error("Gagal membuat PDF. Coba lagi.");
+    } finally {
+        setIsGenerating(false); // Selesai loading
+    }
   };
 
   return (
@@ -88,7 +104,7 @@ export default function InvoiceModal({ event }: { event: any }) {
       </button>
 
       {isOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm z-[9999]">
+        <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
             <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
                 📄 Generate Invoice
@@ -108,10 +124,27 @@ export default function InvoiceModal({ event }: { event: any }) {
                </div>
 
                <div className="flex justify-end gap-2 mt-4 pt-4 border-t">
-                   <button onClick={() => setIsOpen(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded">Batal</button>
-                   <button onClick={generatePDF} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center gap-2">
-                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                       Download PDF
+                   <button onClick={() => setIsOpen(false)} disabled={isGenerating} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded">Batal</button>
+                   
+                   <button 
+                        onClick={generatePDF} 
+                        disabled={isGenerating} // Disable saat loading
+                        className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center gap-2 disabled:bg-green-400"
+                    >
+                        {isGenerating ? (
+                            <>
+                                <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Memproses...
+                            </>
+                        ) : (
+                            <>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                Download PDF
+                            </>
+                        )}
                    </button>
                </div>
             </div>

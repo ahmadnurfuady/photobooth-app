@@ -1,8 +1,9 @@
 'use server';
 
 import { createClient } from '@supabase/supabase-js';
-import { google } from 'googleapis';
-import archiver from 'archiver';
+// ❌ HAPUS import statis '' & 'archiver'
+
+// import archiver from 'archiver';
 import { PassThrough } from 'stream';
 
 // Setup Supabase Admin
@@ -13,6 +14,13 @@ const supabaseAdmin = createClient(
 
 export async function backupEventToDrive(eventId: string) {
   try {
+    // 🚀 OPTIMASI 1: Lazy Load Google APIs (11MB++)
+    const { google } = await import('googleapis');
+
+    // 🚀 OPTIMASI 2: Lazy Load Archiver (Library ZIP yang berat)
+    // Kita pakai .default karena archiver biasanya export default
+    const archiver = (await import('archiver')).default;
+
     // 1. CEK KONEKSI GOOGLE
     const { data: settings } = await supabaseAdmin.from('app_settings').select('*');
     const getSetting = (key: string) => settings?.find((s) => s.key === key)?.value;
@@ -112,10 +120,9 @@ export async function backupEventToDrive(eventId: string) {
                 }
             }
 
-            // 3. FOTO INDIVIDU (Nama kolom diganti jadi 'photos')
+            // 3. FOTO INDIVIDU
             let rawPhotos: any[] = [];
             
-            // Cek kolom 'photos' (bukan photos_url lagi)
             if (Array.isArray(session.photos)) {
                 rawPhotos = session.photos;
             } else if (typeof session.photos === 'string') {
@@ -128,11 +135,9 @@ export async function backupEventToDrive(eventId: string) {
             for (const item of rawPhotos) {
                 let urlToDownload = '';
 
-                // Logika pencarian URL di dalam String atau Object
                 if (typeof item === 'string') {
                     urlToDownload = item;
                 } else if (typeof item === 'object' && item !== null) {
-                    // Cari properti url yang mungkin ada
                     urlToDownload = item.secure_url || item.url || item.link || item.path || '';
                 }
 

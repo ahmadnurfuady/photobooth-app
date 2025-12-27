@@ -1,7 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { google } from 'googleapis';
-import { createClient } from '@supabase/supabase-js';
+// app/api/auth/google/callback/route.ts
 
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+// ❌ HAPUS import static di sini agar tidak membebani server start-up
+
+
+// Inisialisasi Supabase tetap di luar agar connection pooling aman
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -22,6 +26,10 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    // 🚀 OPTIMASI: Import Google HANYA saat request masuk (Lazy Load)
+    // Webpack akan memisahkan library 11MB ini ke chunk terpisah
+    const { google } = await import('googleapis');
+
     // 1. Ambil Kunci lagi dari DB
     const { data: settings } = await supabaseAdmin.from('app_settings').select('*');
     const getSetting = (key: string) => settings?.find((s) => s.key === key)?.value;
@@ -32,11 +40,10 @@ export async function GET(req: NextRequest) {
       getSetting('google_redirect_uri')
     );
 
-    // 2. TUKAR CODE JADI TOKEN (Momen Kebenaran!)
+    // 2. TUKAR CODE JADI TOKEN
     const { tokens } = await oauth2Client.getToken(code);
 
     // 3. Simpan Refresh Token ke Database
-    // Refresh token adalah "Kunci Abadi". Access token cuma tahan 1 jam.
     if (tokens.refresh_token) {
         await supabaseAdmin.from('app_settings').upsert({
             key: 'google_refresh_token',
@@ -45,7 +52,7 @@ export async function GET(req: NextRequest) {
         });
     }
 
-    // (Opsional) Simpan Access token juga buat cache
+    // Simpan Access token
     if (tokens.access_token) {
         await supabaseAdmin.from('app_settings').upsert({
             key: 'google_access_token',
@@ -54,7 +61,7 @@ export async function GET(req: NextRequest) {
         });
     }
     
-    // Simpan email akun yang terhubung (biar Admin tau ini akun siapa)
+    // Simpan email akun yang terhubung
     oauth2Client.setCredentials(tokens);
     const drive = google.drive({ version: 'v3', auth: oauth2Client });
     const about = await drive.about.get({ fields: 'user(emailAddress, displayName)' });

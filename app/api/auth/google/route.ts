@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { google } from 'googleapis';
+// ❌ HAPUS import statis ini
+
 import { createClient } from '@supabase/supabase-js';
 
 // Setup Admin Client
@@ -10,6 +11,10 @@ const supabaseAdmin = createClient(
 
 export async function GET(req: Request) {
   try {
+    // 🚀 OPTIMASI: Import Google HANYA saat endpoint ini dipanggil
+    // Ini membuat server start-up jauh lebih cepat dan bundle size mengecil
+    const { google } = await import('googleapis');
+
     // 1. Ambil Kunci dari Database
     const { data: settings } = await supabaseAdmin.from('app_settings').select('*');
     
@@ -18,7 +23,7 @@ export async function GET(req: Request) {
 
     const clientId = getSetting('google_client_id');
     const clientSecret = getSetting('google_client_secret');
-    const redirectUri = getSetting('google_redirect_uri'); // Default: localhost...callback
+    const redirectUri = getSetting('google_redirect_uri'); 
 
     if (!clientId || !clientSecret || !redirectUri) {
       return NextResponse.json({ error: "Konfigurasi Google belum lengkap di Settings." }, { status: 400 });
@@ -32,11 +37,10 @@ export async function GET(req: Request) {
     );
 
     // 3. Generate URL Login
-    // scope 'drive.file' artinya aplikasi hanya bisa akses file yang dibuat oleh aplikasi ini (Aman)
     const authUrl = oauth2Client.generateAuthUrl({
-      access_type: 'offline', // PENTING: Agar dapat Refresh Token (untuk akses selamanya)
+      access_type: 'offline', 
       scope: ['https://www.googleapis.com/auth/drive.file'],
-      prompt: 'consent' // Paksa muncul layar izin agar refresh token selalu dapat
+      prompt: 'consent' 
     });
 
     // 4. Lempar Admin ke Google
