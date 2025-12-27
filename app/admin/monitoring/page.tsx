@@ -302,7 +302,8 @@ export default function MonitoringDashboard() {
                                         <th className="px-6 py-3 font-medium opacity-70">Message</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y" style={{ divideColor: 'rgba(128,128,128, 0.1)' }}>
+                                // ✅ INI BENAR (Pakai cara Tailwind)
+<tbody className="divide-y divide-[rgba(128,128,128,0.1)]">
                                     {logs.map((log) => (
                                         <tr key={log.id} className="hover:bg-gray-50/5 transition" style={{ backgroundColor: log.severity === 'critical' ? 'rgba(239, 68, 68, 0.1)' : 'transparent' }}>
                                             <td className="px-6 py-3 whitespace-nowrap opacity-70">{format(new Date(log.created_at), 'HH:mm:ss')}</td>

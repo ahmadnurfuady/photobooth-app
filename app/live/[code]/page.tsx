@@ -4,11 +4,13 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useParams } from 'next/navigation';
 import { Loader2, Clock, Maximize2, Minimize2, Lock, KeyRound } from 'lucide-react';
+// Tidak ada import QR Code lagi
 
 type Photo = {
   id: string;
   cloudinary_url: string;
   created_at: string;
+  is_hidden?: boolean;
 };
 
 // Helper transparansi warna
@@ -25,9 +27,17 @@ const hexToRgba = (hex: string, alpha: number) => {
   return `rgba(255,255,255,${alpha})`;
 }
 
+// 🔥 POIN 2 (OPTIMASI): Fungsi untuk meminta gambar versi KECIL ke Cloudinary
+// Ini akan mengubah URL gambar asli (besar) menjadi gambar lebar 600px + kompresi otomatis.
+const getOptimizedUrl = (url: string) => {
+    if (!url || !url.includes('cloudinary.com')) return url;
+    // Sisipkan parameter transformasi: w_600, q_auto (quality), f_auto (format)
+    return url.replace('/upload/', '/upload/w_600,q_auto,f_auto/');
+};
+
 export default function LiveFeedPage() {
   const params = useParams();
-  const urlParam = params.code as string; // Bisa berupa Kode Akses ATAU ID Event
+  const rawCode = params.code as string;
 
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [eventName, setEventName] = useState('');
@@ -38,19 +48,18 @@ export default function LiveFeedPage() {
   
   const [loading, setLoading] = useState(true);
   const [eventId, setEventId] = useState<string | null>(null);
-  const [accessCodeDisplay, setAccessCodeDisplay] = useState(''); // Untuk display di header
+  const [accessCodeDisplay, setAccessCodeDisplay] = useState(''); 
   const [currentTime, setCurrentTime] = useState('');
   
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showCursor, setShowCursor] = useState(true);
   
-  // 🔒 PIN Logic
+  // Security State
   const [isLocked, setIsLocked] = useState(true);
-  const [eventPin, setEventPin] = useState<string | null>(null);
   const [inputPin, setInputPin] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
 
-  // JAM DIGITAL
   useEffect(() => {
     const timer = setInterval(() => {
         const now = new Date();
@@ -59,7 +68,6 @@ export default function LiveFeedPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // SOFT KIOSK LOGIC
   useEffect(() => {
     let cursorTimer: NodeJS.Timeout;
     const handleMouseMove = () => {
@@ -83,58 +91,58 @@ export default function LiveFeedPage() {
     };
   }, []);
 
-  // FETCH DATA (LOGIC BARU: DUKUNG UUID & KODE AKSES)
   useEffect(() => {
     const initData = async () => {
-      // Cek apakah parameter URL adalah UUID (ID Panjang) atau Kode Pendek
-      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(urlParam);
-
+      const cleanCode = rawCode.trim();
+      const isUUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(cleanCode);
+      
       let query = supabase
         .from('events')
-        .select('id, name, access_code, primary_color, secondary_color, background_color, pin');
+        .select('id, name, access_code, primary_color, secondary_color, background_color'); 
 
-      // 🔥 LOGIC PINTAR:
       if (isUUID) {
-         // Jika URL pakai ID Panjang (Rahasia), cari berdasarkan ID
-         query = query.eq('id', urlParam);
+         query = query.eq('id', cleanCode);
       } else {
-         // Jika URL pakai Kode (FUAD1234), cari berdasarkan Access Code
-         query = query.eq('access_code', urlParam.toUpperCase());
+         query = query.eq('access_code', cleanCode.toUpperCase());
       }
 
-      const { data: event } = await query.single();
+      const { data: event, error } = await query.single();
 
-      if (!event) {
+      if (error || !event) {
         setLoading(false);
         return;
       }
 
       setEventName(event.name);
       setEventId(event.id);
-      
-      // Simpan Kode Akses asli untuk ditampilkan di Header (hanya visual)
-      // Jadi meskipun URL-nya ID acak, di layar tetap tampil "Kode: FUAD1234" agar tamu tahu.
       setAccessCodeDisplay(event.access_code);
 
-      // Cek PIN
-      if (event.pin && event.pin.trim() !== '') {
-          setEventPin(event.pin);
-          setIsLocked(true);
-      } else {
-          setIsLocked(false);
+      // Cek Status Lock via API
+      try {
+          const authCheck = await fetch('/api/live-auth', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ mode: 'check_lock', event_id: event.id })
+          });
+          const authData = await authCheck.json();
+          setIsLocked(authData.isLocked);
+      } catch (e) {
+          console.error("Auth check failed", e);
+          setIsLocked(true); 
       }
       
       if (event.primary_color) setPrimaryColor(event.primary_color);
       if (event.secondary_color) setSecondaryColor(event.secondary_color); 
       if (event.background_color) setBgColor(event.background_color);
 
-      // Load Photos
+      // Fetch Awal (Limit 50 foto agar ringan)
       const { data: existingPhotos } = await supabase
         .from('photos')
         .select('*')
         .eq('event_id', event.id)
+        .eq('is_hidden', false)
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(50); // 🔥 LIMIT QUERY
 
       if (existingPhotos) {
         setPhotos(existingPhotos);
@@ -143,21 +151,66 @@ export default function LiveFeedPage() {
     };
 
     initData();
-  }, [urlParam]); // Trigger ulang jika URL berubah
+  }, [rawCode]);
 
-  // REALTIME UPDATE
+  // Realtime Listener
   useEffect(() => {
     if (!eventId) return;
     const channel = supabase
       .channel('live_photos')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'photos', filter: `event_id=eq.${eventId}` },
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'photos', filter: `event_id=eq.${eventId}` },
         (payload) => {
-          const newPhoto = payload.new as Photo;
-          setPhotos((prev) => [newPhoto, ...prev]);
+          if (payload.eventType === 'INSERT') {
+              const newPhoto = payload.new as Photo;
+              if (!newPhoto.is_hidden) {
+                  // 🔥 POIN 2 (MEMORY OPTIMIZATION):
+                  // Tambahkan foto baru di depan, lalu potong array agar maksimal tetap 50.
+                  // Ini mencegah browser crash jika event berjalan lama.
+                  setPhotos((prev) => {
+                      const updated = [newPhoto, ...prev];
+                      return updated.slice(0, 50); 
+                  });
+              }
+          } else if (payload.eventType === 'UPDATE') {
+              const updatedPhoto = payload.new as Photo;
+              if (updatedPhoto.is_hidden) {
+                  setPhotos((prev) => prev.filter(p => p.id !== updatedPhoto.id));
+              }
+          } else if (payload.eventType === 'DELETE') {
+              const deletedId = payload.old.id;
+              setPhotos((prev) => prev.filter(p => p.id !== deletedId));
+          }
         }
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
+  }, [eventId]);
+
+  // 🔥 POIN 1 (AUTO-HEALING): Internet Kedip / Reconnect Issue
+  // Interval check setiap 1 menit untuk memastikan data sinkron jika internet sempat putus
+  // Ini akan mengambil ulang 50 foto terbaru dari server secara diam-diam.
+  useEffect(() => {
+    if (!eventId) return;
+
+    const silentRefresh = async () => {
+      // Query yang sama persis dengan fetch awal
+      const { data: freshPhotos } = await supabase
+        .from('photos')
+        .select('*')
+        .eq('event_id', eventId)
+        .eq('is_hidden', false)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (freshPhotos) {
+        // Update state (React akan handle diffing agar tidak flickering parah)
+        setPhotos(freshPhotos);
+      }
+    };
+
+    // Jalankan setiap 60 detik (60000 ms)
+    const interval = setInterval(silentRefresh, 60000);
+    return () => clearInterval(interval);
   }, [eventId]);
 
   const toggleFullscreen = () => {
@@ -168,14 +221,33 @@ export default function LiveFeedPage() {
     }
   };
 
-  const handleUnlock = (e: React.FormEvent) => {
+  const handleUnlock = async (e: React.FormEvent) => {
       e.preventDefault();
-      if (inputPin === eventPin) {
-          setIsLocked(false);
-          setErrorMsg('');
-      } else {
-          setErrorMsg('PIN Salah!');
-          setInputPin('');
+      setIsVerifying(true);
+      setErrorMsg('');
+
+      try {
+          const res = await fetch('/api/live-auth', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ 
+                  mode: 'verify', 
+                  event_id: eventId, 
+                  input_pin: inputPin 
+              })
+          });
+          
+          const data = await res.json();
+          if (data.valid) {
+              setIsLocked(false);
+          } else {
+              setErrorMsg('PIN Salah!');
+              setInputPin('');
+          }
+      } catch (err) {
+          setErrorMsg('Gagal verifikasi server');
+      } finally {
+          setIsVerifying(false);
       }
   };
 
@@ -188,10 +260,13 @@ export default function LiveFeedPage() {
   }
 
   if (!eventId) {
-    return <div className="min-h-screen flex items-center justify-center text-gray-400">Event Tidak Ditemukan</div>;
+    return (
+        <div className="min-h-screen flex flex-col items-center justify-center text-gray-400">
+            <p className="text-xl font-bold">Event Tidak Ditemukan</p>
+        </div>
+    );
   }
 
-  // --- LOCK SCREEN ---
   if (isLocked) {
       return (
         <div className="h-screen w-screen flex flex-col items-center justify-center font-sans bg-gray-50">
@@ -200,50 +275,56 @@ export default function LiveFeedPage() {
                     <Lock className="w-8 h-8 text-red-500" />
                 </div>
                 <h2 className="text-2xl font-bold text-gray-800 mb-2">Restricted Access</h2>
-                <p className="text-gray-500 text-sm mb-8">
-                    Masukkan PIN Event untuk membuka tampilan.
-                </p>
+                <p className="text-gray-500 text-sm mb-8">Event: <strong>{eventName}</strong></p>
                 <form onSubmit={handleUnlock} className="space-y-4">
-                    <div className="relative">
-                        <KeyRound className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
-                        <input 
-                            type="password" 
-                            value={inputPin}
-                            onChange={(e) => setInputPin(e.target.value)}
-                            placeholder="PIN Event"
-                            className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg text-center tracking-widest font-mono"
-                            autoFocus
-                        />
-                    </div>
+                    <input 
+                        type="password" 
+                        value={inputPin}
+                        onChange={(e) => setInputPin(e.target.value)}
+                        placeholder="PIN Event"
+                        className="w-full pl-4 pr-4 py-3 rounded-xl border border-gray-200 text-lg text-center tracking-widest"
+                        autoFocus
+                        disabled={isVerifying}
+                    />
                     {errorMsg && <p className="text-red-500 text-sm font-bold animate-pulse">{errorMsg}</p>}
-                    <button type="submit" className="w-full py-3 rounded-xl bg-gray-900 text-white font-bold hover:bg-black transition-colors">
-                        BUKA LAYAR
+                    <button type="submit" disabled={isVerifying} className="w-full py-3 rounded-xl bg-gray-900 text-white font-bold">
+                        {isVerifying ? <Loader2 className="animate-spin w-5 h-5 mx-auto" /> : 'BUKA LAYAR'}
                     </button>
                 </form>
-                <p className="mt-6 text-xs text-gray-300 uppercase tracking-widest">SnapBooth Security</p>
             </div>
         </div>
       );
   }
 
-  // --- LIVE FEED RENDER ---
   const shouldAnimate = photos.length > 1;
 
   const renderPhotos = () => (
     <>
         {photos.map((photo, index) => (
-            <div key={`${photo.id}-orig-${index}`} className="relative flex-shrink-0 group" style={{ height: '50vh' }}>
+            <div key={`${photo.id}-orig-${index}`} className="relative flex-shrink-0 group animate-in fade-in zoom-in duration-700" style={{ height: '50vh' }}>
                 <div className="h-full w-auto p-3 rounded-2xl shadow-xl transform transition-transform duration-500 group-hover:scale-105 bg-white"
                      style={{ boxShadow: `0 15px 30px -5px ${hexToRgba(primaryColor, 0.15)}` }}>
-                    <img src={photo.cloudinary_url} alt="Live" className="h-full w-auto object-contain rounded-xl bg-gray-50" loading="eager" />
+                    {/* 🔥 GANTI SRC DENGAN VERSI OPTIMIZED */}
+                    <img 
+                        src={getOptimizedUrl(photo.cloudinary_url)} 
+                        alt="Live" 
+                        className="h-full w-auto object-contain rounded-xl bg-gray-50" 
+                        loading="eager" 
+                    />
                 </div>
             </div>
         ))}
         {shouldAnimate && photos.map((photo, index) => (
-            <div key={`${photo.id}-shadow-${index}`} className="relative flex-shrink-0 group" style={{ height: '50vh' }}>
+            <div key={`${photo.id}-shadow-${index}`} className="relative flex-shrink-0 group animate-in fade-in zoom-in duration-700" style={{ height: '50vh' }}>
                 <div className="h-full w-auto p-3 rounded-2xl shadow-xl transform transition-transform duration-500 group-hover:scale-105 bg-white"
                      style={{ boxShadow: `0 15px 30px -5px ${hexToRgba(primaryColor, 0.15)}` }}>
-                    <img src={photo.cloudinary_url} alt="Live" className="h-full w-auto object-contain rounded-xl bg-gray-50" loading="eager" />
+                    {/* 🔥 GANTI SRC DENGAN VERSI OPTIMIZED */}
+                    <img 
+                        src={getOptimizedUrl(photo.cloudinary_url)} 
+                        alt="Live" 
+                        className="h-full w-auto object-contain rounded-xl bg-gray-50" 
+                        loading="eager" 
+                    />
                 </div>
             </div>
         ))}
@@ -279,8 +360,7 @@ export default function LiveFeedPage() {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: secondaryColor }}></span>
               <span className="relative inline-flex rounded-full h-2 w-2" style={{ backgroundColor: primaryColor }}></span>
             </span>
-           {/* Tampilkan Kode Akses untuk Tamu, meskipun URL-nya ID Rahasia */}
-           Live Gallery 
+           Live Gallery •  
         </div>
         <h1 className="text-4xl md:text-6xl font-black tracking-tight drop-shadow-sm mb-2"
             style={{ 
@@ -332,12 +412,14 @@ export default function LiveFeedPage() {
                 "Capture every moment, share the joy! ✨"
              </p>
          </div>
-         <div className="flex items-center justify-center gap-3 mt-4 opacity-50">
+        <div className="flex items-center justify-center gap-3 mt-3 opacity-50">
             <span className="h-[1px] w-12 bg-gradient-to-r from-transparent to-gray-400"></span>
             <p className="text-[10px] uppercase tracking-[0.25em] font-bold text-gray-500">Powered by SnapBooth</p>
             <span className="h-[1px] w-12 bg-gradient-to-l from-transparent to-gray-400"></span>
          </div>
 
+         
+         {/* FULLSCREEN BUTTON */}
          <button 
             onClick={toggleFullscreen}
             className={`absolute bottom-4 right-4 p-3 rounded-full text-gray-400 bg-white/80 backdrop-blur-md border border-gray-200 shadow-lg transition-all duration-300

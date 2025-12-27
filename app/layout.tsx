@@ -30,10 +30,47 @@ export const revalidate = 0;
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Photobooth App',
-  description: 'Professional photobooth application',
-};
+  // Base URL (Penting agar gambar terbaca di WA saat deploy)
+  // Nanti saat sudah punya domain sendiri, ganti 'https://snapbooth.vercel.app' dengan domain asli.
+  // Untuk sekarang biarkan default atau null, Next.js akan mencoba resolve otomatis.
+  metadataBase: new URL('https://ministudiophotobooth.vercel.app'), 
 
+  title: {
+    template: '%s | SnapBooth Live', // Judul halaman lain akan ikut pola ini (misal: "Camera | SnapBooth Live")
+    default: 'SnapBooth - Premium Live Event Gallery', // Judul halaman depan
+  },
+  description: 'Abadikan momen seru kamu dan tampil langsung di layar utama! 📸✨ Powered by SnapBooth.',
+  
+  // Icon kecil di tab browser
+  icons: {
+    icon: '/favicon.ico', 
+  },
+
+  // Konfigurasi untuk WhatsApp / Facebook / LinkedIn
+  openGraph: {
+    title: 'SnapBooth - Yuk Foto Bareng! 📸',
+    description: 'Upload fotomu sekarang dan ramaikan acara ini. Klik untuk mulai!',
+    siteName: 'SnapBooth Pro',
+    locale: 'id_ID',
+    type: 'website',
+    images: [
+      {
+        url: '/og-image.jpg', // File yang tadi kamu taruh di folder public
+        width: 1200,
+        height: 630,
+        alt: 'SnapBooth Event Preview',
+      },
+    ],
+  },
+  
+  // Konfigurasi untuk Twitter / X
+  twitter: {
+    card: 'summary_large_image',
+    title: 'SnapBooth Live Event',
+    description: 'Capture your moment and shine on stage!',
+    images: ['/og-image.jpg'],
+  },
+};
 export default function RootLayout({
   children,
 }: {

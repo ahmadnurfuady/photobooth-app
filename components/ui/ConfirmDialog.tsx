@@ -50,7 +50,7 @@ export const ConfirmDialog:  React.FC<ConfirmDialogProps> = ({
           <Button
             variant={variant}
             onClick={handleConfirm}
-            loading={loading}
+            isLoading={loading}
             disabled={loading}
           >
             {confirmText}

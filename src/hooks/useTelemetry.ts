@@ -1,6 +1,6 @@
 // src/hooks/useTelemetry.ts
 import { useCallback } from 'react';
-import { telemetry } from '@/services/TelemetryService';
+import { telemetry } from '@/src/services/TelemetryService';
 
 export const useTelemetry = () => {
   const trackError = useCallback((error: any, context: string) => {

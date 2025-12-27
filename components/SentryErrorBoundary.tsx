@@ -13,7 +13,7 @@ export const SentryErrorBoundary: React.FC<Props> = ({ children }) => {
   
   // ✅ FUNGSI PENTING: Menghubungkan crash React ke Telemetry Service
   // Ini memastikan error fatal juga tercatat di Supabase logs, bukan cuma di Sentry
-  const handleError = (error: Error, componentStack: string, eventId: string) => {
+  const handleError = (error: any, componentStack: string, eventId: string) => {
     telemetry.track({
       category: 'REACT_RENDER',
       action: 'FatalCrash',
@@ -69,7 +69,7 @@ export const SentryErrorBoundary: React.FC<Props> = ({ children }) => {
             
             <div className="bg-red-50 border border-red-200 rounded-md p-4 text-left overflow-auto max-h-40 shadow-inner">
               <code className="text-xs text-red-800 font-mono whitespace-pre-wrap">
-                {error.toString()}
+                {error instanceof Error ? error.message : String(error)}
               </code>
             </div>
 

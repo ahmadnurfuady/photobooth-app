@@ -1,5 +1,3 @@
-//app/result/page.tsx
-
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -16,8 +14,8 @@ import { logger } from '@/lib/Logger';
 // ✅ IMPORT SENTRY (Tetap dipertahankan)
 import { captureSystemError } from '@/src/utils/errorHandler'; 
 
-// 🔥 TAMBAHAN BARU: Import Supabase Client
-import { supabase } from '@/lib/supabase';
+// ❌ HAPUS IMPORT SUPABASE (Sudah tidak dipakai di sini untuk keamanan)
+// import { supabase } from '@/lib/supabase'; <-- HAPUS BARIS INI
 
 import {
   createPhotoStripWithFrame,
@@ -224,24 +222,11 @@ export default function ResultPage() {
 
         setSession(responseData.data);
         
-        // 🔥 FITUR LIVE FEED: SIMPAN LINK FOTO KE TABEL PHOTOS
-        // Kode ini ditambahkan agar foto langsung muncul di layar TV / Live Feed
-        if (activeEventId && responseData.data?.composite_url) {
-             const { error: liveError } = await supabase
-                .from('photos')
-                .insert({
-                    event_id: activeEventId,
-                    cloudinary_url: responseData.data.composite_url
-                });
-             
-             if (liveError) {
-                console.error("Gagal update Live Feed:", liveError);
-                // Tidak perlu throw error karena ini fitur sekunder
-             } else {
-                console.log("✅ Foto berhasil masuk Live Feed!");
-             }
-        }
-
+        // 🔒 UPDATE SECURITY PHASE 2:
+        // Kode insert manual ke tabel 'photos' SUDAH DIHAPUS dari sini.
+        // Sekarang Backend (/api/sessions) yang menangani insert ke Live Feed secara otomatis.
+        // Ini mencegah celah keamanan Client-side Insert.
+        
         // Update URL download jika server mengembalikan URL publik (Cloudinary)
         if (responseData.data?.composite_url) {
             // setDownloadUrl(responseData.data.composite_url); // Opsional: Direct link ke gambar

@@ -1,5 +1,5 @@
 // src/services/NotificationManager.ts
-import { Severity, NotificationPreferences } from '../types/system';
+import { Severity, NotificationPreferences } from '@/types/system';
 
 const DEFAULT_PREFS: NotificationPreferences = {
   soundEnabled: true,

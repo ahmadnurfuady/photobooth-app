@@ -1,14 +1,15 @@
 // app/api/sessions/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
 import { sessionQueries } from '@/lib/supabase';
 import { uploadToCloudinary } from '@/lib/cloudinary';
 import { v4 as uuidv4 } from 'uuid';
 import { createClient } from '@supabase/supabase-js'; 
 
-// Konfigurasi Supabase Client
+// 🔥 PERBAIKAN DI SINI: Gunakan SERVICE_ROLE_KEY (Bukan ANON_KEY)
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY! // <--- GANTI INI
 );
 
 // POST /api/sessions - Create new photo session
@@ -149,6 +150,30 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Failed to save session to database', details: error },
         { status: 500 }
       );
+    }
+
+    // 🔥 UPDATE PHASE 2: AUTOMATIC INSERT TO LIVE FEED (PHOTOS TABLE)
+    // Karena Frontend sudah tidak boleh insert (dikunci RLS), Backend yang melakukan ini.
+    if (targetEventId && compositeResult.secure_url) {
+        try {
+            const { error: liveError } = await supabaseAdmin
+                .from('photos')
+                .insert({
+                    event_id: targetEventId,
+                    cloudinary_url: compositeResult.secure_url,
+                    // session_id: sessionId, // Opsional: Uncomment jika tabel photos punya kolom session_id
+                });
+
+            if (liveError) {
+                console.error('⚠️ [Live Feed] Failed to insert photo:', liveError.message);
+                // Tidak return error 500, karena sesi utama sudah berhasil disimpan.
+                // Cukup log error agar tidak mengganggu flow user.
+            } else {
+                console.log('✅ [Live Feed] Photo inserted successfully');
+            }
+        } catch (err) {
+            console.error('⚠️ [Live Feed] Unexpected error:', err);
+        }
     }
 
     return NextResponse.json({

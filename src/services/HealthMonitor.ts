@@ -1,6 +1,6 @@
 // src/services/HealthMonitor.ts
 import { supabase } from '@/lib/supabase'; // Asumsi client supabase ada
-import { ServiceHealth, SystemHealthState } from '../types/system';
+import { ServiceHealth, SystemHealthState } from '@/types/system';
 
 class HealthMonitor {
   // --- Checkers ---
