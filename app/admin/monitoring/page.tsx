@@ -4,10 +4,22 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link'; 
 import { supabase } from '@/lib/supabase'; 
+import dynamic from 'next/dynamic'; // ✅ 1. IMPORT DYNAMIC
 
-// ✅ IMPORT SYSTEM CONTEXT & WIDGET
+// ✅ IMPORT SYSTEM CONTEXT
 import { useSystem } from '@/src/context/SystemContext';
-import { HealthWidget } from '@/components/HealthWidget';
+
+// ❌ REMOVE STATIC IMPORT
+// import { HealthWidget } from '@/components/HealthWidget';
+
+// ✅ 2. LAZY LOAD HEALTH WIDGET
+// Uses .then(mod => mod.HealthWidget) because it is a named export
+const HealthWidget = dynamic(() => import('@/components/HealthWidget').then(mod => mod.HealthWidget), {
+  ssr: false,
+  loading: () => (
+    <div className="animate-pulse bg-gray-200 h-10 w-32 rounded-lg"></div>
+  )
+});
 
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
@@ -198,7 +210,7 @@ export default function MonitoringDashboard() {
           </p>
         </div>
 
-        {/* ✅ WIDGET KESEHATAN SISTEM (HEALTH) DI HEADER */}
+        {/* ✅ WIDGET KESEHATAN SISTEM (HEALTH) - NOW LAZY LOADED */}
         <div className="scale-90 origin-right">
              <HealthWidget />
         </div>
@@ -302,8 +314,7 @@ export default function MonitoringDashboard() {
                                         <th className="px-6 py-3 font-medium opacity-70">Message</th>
                                     </tr>
                                 </thead>
-                                // ✅ INI BENAR (Pakai cara Tailwind)
-<tbody className="divide-y divide-[rgba(128,128,128,0.1)]">
+                                <tbody className="divide-y divide-[rgba(128,128,128,0.1)]">
                                     {logs.map((log) => (
                                         <tr key={log.id} className="hover:bg-gray-50/5 transition" style={{ backgroundColor: log.severity === 'critical' ? 'rgba(239, 68, 68, 0.1)' : 'transparent' }}>
                                             <td className="px-6 py-3 whitespace-nowrap opacity-70">{format(new Date(log.created_at), 'HH:mm:ss')}</td>

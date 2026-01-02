@@ -155,7 +155,7 @@ export default function MultiBoothDashboard() {
         const { count } = await supabase
           .from('photo_sessions')
           .select('*', { count: 'exact', head: true })
-          .eq('booth_id', booth.id);
+          .eq('event_id', booth.id);
 
         const photoCount = count || 0;
         globalPhotos += photoCount; // Tambahkan ke global counter

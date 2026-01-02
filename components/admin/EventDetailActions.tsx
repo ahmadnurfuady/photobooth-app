@@ -1,12 +1,33 @@
+// components/admin/EventDetailActions.tsx
 'use client';
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import toast from 'react-hot-toast';
-import html2canvas from 'html2canvas';
 import { POSTER_ID } from './EventPosterTemplate';
-import DeleteEventPhotos from './DeleteEventPhotos'; // Pastikan file ini ada dari langkah sebelumnya
-import BackupButton from '@/components/admin/BackupButton';
+import dynamic from 'next/dynamic';
+
+// ✅ LAZY LOAD DENGAN LOADING STATE YANG AMAN
+// Kita ganti loading-nya pakai tombol biasa biar tidak error variant
+
+const DeleteEventPhotos = dynamic(() => import('./DeleteEventPhotos'), {
+  ssr: false, 
+  loading: () => (
+    // Menggunakan variant="outline" yang pasti ada, dan styling manual untuk warna merah
+    <Button variant="outline" size="sm" disabled className="opacity-50 border-red-200 text-red-300">
+      ...
+    </Button>
+  )
+});
+
+const BackupButton = dynamic(() => import('@/components/admin/BackupButton'), {
+  ssr: false,
+  loading: () => (
+    <Button variant="outline" size="sm" disabled className="opacity-50">
+      ...
+    </Button>
+  )
+});
 
 interface Props {
   event: any;
@@ -28,17 +49,15 @@ export default function EventDetailActions({ event, hasPhotos }: Props) {
     const toastId = toast.loading('Membuat poster...');
 
     try {
-      // 1. Screenshot elemen tersembunyi
+      const html2canvas = (await import('html2canvas')).default;
+
       const canvas = await html2canvas(element, {
-        scale: 1.5, // Resolusi tinggi
+        scale: 1.5, 
         backgroundColor: '#ffffff',
         useCORS: true,
       });
 
-      // 2. Convert ke Image URL
       const image = canvas.toDataURL('image/png');
-
-      // 3. Trigger Download
       const link = document.createElement('a');
       link.href = image;
       link.download = `Poster-${event.name.replace(/\s+/g, '-').toLowerCase()}.png`;
@@ -55,12 +74,6 @@ export default function EventDetailActions({ event, hasPhotos }: Props) {
     }
   };
 
-  const handleBackupClick = () => {
-    toast('Fitur Backup Google Drive akan segera hadir di update berikutnya!', {
-        icon: '🚧',
-    });
-  };
-
   return (
     <div className="flex flex-wrap gap-2 justify-end mt-4 md:mt-0">
       {/* Tombol Download Poster */}
@@ -73,12 +86,13 @@ export default function EventDetailActions({ event, hasPhotos }: Props) {
       >
         🖼️ Download Poster
       </Button>
-        {hasPhotos && (
+      
+       {/* Tombol Backup (Lazy Load) */}
+       {hasPhotos && (
           <BackupButton eventId={event.id} />
        )}
-      {/* Tombol Backup (Placeholder dulu) */}
 
-      {/* Tombol Hapus Foto (Logic yang sudah kita buat sebelumnya) */}
+      {/* Tombol Hapus Foto (Lazy Load) */}
       <DeleteEventPhotos 
         eventId={event.id}
         eventName={event.name}
