@@ -30,11 +30,13 @@ export const FrameUploadModal: React.FC<FrameUploadModalProps> = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  
-  // Preset selection (default to 3 photos)
-  const [selectedPhotoCount, setSelectedPhotoCount] = useState<1 | 2 | 3 | 4>(3);
-  const selectedPreset = FRAME_PRESETS[selectedPhotoCount];
-  
+
+  // Preset selection (default to 3 photos - key 3)
+  // Key 5 is double_strip with 4 photos -> 8 slots (portrait)
+  // Key 6 is double_strip_landscape with 4 photos -> 8 slots (landscape)
+  const [selectedPresetKey, setSelectedPresetKey] = useState<1 | 2 | 3 | 4 | 5 | 6>(3);
+  const selectedPreset = FRAME_PRESETS[selectedPresetKey];
+
   // Photo slots (will be auto-generated based on preset)
   const [photoSlots, setPhotoSlots] = useState<PhotoSlot[]>(
     generateDefaultSlots(FRAME_PRESETS[3])
@@ -44,7 +46,7 @@ export const FrameUploadModal: React.FC<FrameUploadModalProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<number | null>(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  
+
   // Store actual frame image dimensions
   const [frameDimensions, setFrameDimensions] = useState<{ width: number; height: number } | null>(null);
 
@@ -60,7 +62,7 @@ export const FrameUploadModal: React.FC<FrameUploadModalProps> = ({
     setSelectedFile(file);
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
-    
+
     const img = new Image();
     img.onload = () => {
       setFrameDimensions({ width: img.width, height: img.height });
@@ -68,15 +70,15 @@ export const FrameUploadModal: React.FC<FrameUploadModalProps> = ({
     img.src = url;
   };
 
-  // Handle photo count change - regenerate slots with FIXED sizes
-  const handlePhotoCountChange = (count: 1 | 2 | 3 | 4) => {
-    setSelectedPhotoCount(count);
-    const preset = FRAME_PRESETS[count];
-    const fixedSize = FIXED_SLOT_SIZES[count];
+  // Handle preset change - regenerate slots with FIXED sizes
+  const handlePresetChange = (presetKey: 1 | 2 | 3 | 4 | 5 | 6) => {
+    setSelectedPresetKey(presetKey);
+    const preset = FRAME_PRESETS[presetKey];
+    const fixedSize = FIXED_SLOT_SIZES[presetKey];
     const newSlots = generateFixedSizeSlots(preset, fixedSize);
     setPhotoSlots(newSlots);
   };
-  
+
   // Generate slots with FIXED size (4:3 aspect ratio)
   const generateFixedSizeSlots = (
     preset: typeof FRAME_PRESETS[1],
@@ -84,10 +86,10 @@ export const FrameUploadModal: React.FC<FrameUploadModalProps> = ({
   ): PhotoSlot[] => {
     const slots: PhotoSlot[] = [];
     const { layout } = preset;
-    
+
     // NOTE: Logika posisi (x,y) sederhana untuk inisialisasi awal.
     // User bisa geser manual nanti.
-    
+
     switch (layout) {
       case 'single':
         slots.push({
@@ -114,7 +116,7 @@ export const FrameUploadModal: React.FC<FrameUploadModalProps> = ({
         const count = preset.photoCount;
         const totalHeight = (fixedSize.height * count) + (stripGap * (count - 1));
         const stripPadding = (100 - totalHeight) / 2;
-        
+
         for (let i = 0; i < count; i++) {
           slots.push({
             id: i + 1,
@@ -144,8 +146,72 @@ export const FrameUploadModal: React.FC<FrameUploadModalProps> = ({
           }
         }
         break;
+
+      case 'double_strip':
+        // Double Strip: 2 kolom x 4 baris = 8 slot
+        // Foto 1-4 akan di-copy ke slot 5-8 saat render
+        const dsGapX = 4; // Gap horizontal antar kolom (%)
+        const dsGapY = 2; // Gap vertical antar baris (%)
+        const dsSlotW = fixedSize.width; // ~45%
+        const dsSlotH = fixedSize.height; // ~18%
+
+        // Total width kedua kolom + gap
+        const totalDsWidth = (dsSlotW * 2) + dsGapX;
+        const startDsX = (100 - totalDsWidth) / 2;
+
+        // Total height 4 baris + gaps (use 90% safe zone for text at bottom)
+        const safeZone = 88;
+        const totalDsHeight = (dsSlotH * 4) + (dsGapY * 3);
+        const startDsY = (safeZone - totalDsHeight) / 2;
+
+        // Generate 8 slots (2 kolom x 4 baris)
+        for (let row = 0; row < 4; row++) {
+          for (let col = 0; col < 2; col++) {
+            const slotId = row * 2 + col + 1; // 1-8
+            slots.push({
+              id: slotId,
+              x: startDsX + col * (dsSlotW + dsGapX),
+              y: startDsY + row * (dsSlotH + dsGapY),
+              width: dsSlotW,
+              height: dsSlotH,
+            });
+          }
+        }
+        break;
+
+      case 'double_strip_landscape':
+        // Double Strip Landscape: 4 kolom x 2 baris = 8 slot
+        // Foto 1-4 akan di-copy ke slot 5-8 saat render (horizontal)
+        const dslGapX = 2; // Gap horizontal antar kolom (%)
+        const dslGapY = 2; // Gap vertical antar baris (%)
+        const dslSlotW = fixedSize.width; // ~22%
+        const dslSlotH = fixedSize.height; // ~18%
+
+        // Total width 4 kolom + gaps
+        const totalDslWidth = (dslSlotW * 4) + (dslGapX * 3);
+        const startDslX = (100 - totalDslWidth) / 2;
+
+        // Total height 2 baris + gap (use 88% safe zone for text at bottom)
+        const safeZoneLandscape = 88;
+        const totalDslHeight = (dslSlotH * 2) + dslGapY;
+        const startDslY = (safeZoneLandscape - totalDslHeight) / 2;
+
+        // Generate 8 slots (4 kolom x 2 baris)
+        for (let row = 0; row < 2; row++) {
+          for (let col = 0; col < 4; col++) {
+            const slotIdLandscape = row * 4 + col + 1; // 1-8
+            slots.push({
+              id: slotIdLandscape,
+              x: startDslX + col * (dslSlotW + dslGapX),
+              y: startDslY + row * (dslSlotH + dslGapY),
+              width: dslSlotW,
+              height: dslSlotH,
+            });
+          }
+        }
+        break;
     }
-    
+
     return slots;
   };
 
@@ -162,9 +228,9 @@ export const FrameUploadModal: React.FC<FrameUploadModalProps> = ({
       toast.error('Please wait for frame image to load');
       return;
     }
-    
+
     // Regenerate slots based on fresh selection before moving step
-    const fixedSize = FIXED_SLOT_SIZES[selectedPhotoCount];
+    const fixedSize = FIXED_SLOT_SIZES[selectedPresetKey];
     const fixedSlots = generateFixedSizeSlots(selectedPreset, fixedSize);
     setPhotoSlots(fixedSlots);
 
@@ -181,7 +247,7 @@ export const FrameUploadModal: React.FC<FrameUploadModalProps> = ({
     setLoading(true);
     try {
       const frameConfig: FrameConfig = {
-        photo_count: selectedPhotoCount,
+        photo_count: selectedPreset.photoCount,
         layout: selectedPreset.layout,
         aspect_ratio: selectedPreset.aspectRatio,
         default_slot_size: selectedPreset.defaultSlotSize,
@@ -217,7 +283,7 @@ export const FrameUploadModal: React.FC<FrameUploadModalProps> = ({
     setFrameName('');
     setSelectedFile(null);
     setPreviewUrl(null);
-    setSelectedPhotoCount(3);
+    setSelectedPresetKey(3);
     const fixedSize = FIXED_SLOT_SIZES[3];
     setPhotoSlots(generateFixedSizeSlots(FRAME_PRESETS[3], fixedSize));
     onClose();
@@ -235,7 +301,7 @@ export const FrameUploadModal: React.FC<FrameUploadModalProps> = ({
 
     const container = containerRef.current.getBoundingClientRect();
     if (container.width === 0 || container.height === 0) return;
-    
+
     const deltaX = ((e.clientX - dragStart.x) / container.width) * 100;
     const deltaY = ((e.clientY - dragStart.y) / container.height) * 100;
 
@@ -243,10 +309,10 @@ export const FrameUploadModal: React.FC<FrameUploadModalProps> = ({
       prev.map(slot =>
         slot.id === dragging
           ? {
-              ...slot,
-              x: Math.max(0, Math.min(100 - slot.width, slot.x + deltaX)),
-              y: Math.max(0, Math.min(100 - slot.height, slot.y + deltaY)),
-            }
+            ...slot,
+            x: Math.max(0, Math.min(100 - slot.width, slot.x + deltaX)),
+            y: Math.max(0, Math.min(100 - slot.height, slot.y + deltaY)),
+          }
           : slot
       )
     );
@@ -293,12 +359,12 @@ export const FrameUploadModal: React.FC<FrameUploadModalProps> = ({
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Photo Layout</label>
                 <select
-                  value={selectedPhotoCount}
-                  onChange={(e) => handlePhotoCountChange(Number(e.target.value) as 1 | 2 | 3 | 4)}
+                  value={selectedPresetKey}
+                  onChange={(e) => handlePresetChange(Number(e.target.value) as 1 | 2 | 3 | 4 | 5 | 6)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
                 >
-                  {Object.values(FRAME_PRESETS).map((preset) => (
-                    <option key={preset.photoCount} value={preset.photoCount}>
+                  {Object.entries(FRAME_PRESETS).map(([key, preset]) => (
+                    <option key={key} value={key}>
                       {preset.name} (Ratio: {preset.aspectRatio.toFixed(2)})
                     </option>
                   ))}
@@ -342,16 +408,15 @@ export const FrameUploadModal: React.FC<FrameUploadModalProps> = ({
                   style={{
                     // 1. Paksa Aspect Ratio sesuai kertas fisik
                     aspectRatio: `${selectedPreset.aspectRatio}`,
-                    
-                    // 2. Logic Responsif: 
-                    // Jika Strip (Ratio < 1), kunci tinggi (height), lebar auto.
-                    // Jika Landscape (Ratio > 1), kunci lebar (width), tinggi auto.
-                    height: selectedPreset.aspectRatio < 1 ? '70vh' : 'auto',
-                    width: selectedPreset.aspectRatio > 1 ? '100%' : 'auto',
-                    
-                    // Batasan agar tidak keluar layar
-                    maxHeight: '75vh',
-                    maxWidth: '100%'
+
+                    // 2. Ukuran tetap yang lebih kecil (pixel-based)
+                    // Frame preview tidak perlu terlalu besar
+                    width: selectedPreset.aspectRatio > 1 ? '600px' : 'auto',
+                    height: selectedPreset.aspectRatio < 1 ? '400px' : 'auto',
+
+                    // Batasan maksimum
+                    maxHeight: '400px',
+                    maxWidth: '600px'
                   }}
                   onMouseMove={handleMouseMove}
                   onMouseUp={handleMouseUp}

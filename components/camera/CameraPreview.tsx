@@ -38,7 +38,7 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [frameDimensions, setFrameDimensions] = useState<{ width: number; height: number } | null>(null);
-  
+
   // State dimensi container
   const [containerDims, setContainerDims] = useState({ width: 640, height: 480 });
 
@@ -107,12 +107,12 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
   // 4. LOGIKA BOUNDING BOX
   const boundingBox = useMemo(() => {
     if (!currentSlot || !frameDimensions) {
-      return { width: 300, height: 225, left: '50%', top: '50%', transform: 'translate(-50%, -50%)', aspectRatio: 4/3 };
+      return { width: 300, height: 225, left: '50%', top: '50%', transform: 'translate(-50%, -50%)', aspectRatio: 4 / 3 };
     }
     const FORCE_ASPECT_RATIO = 4 / 3;
     const slotAspectRatio = FORCE_ASPECT_RATIO;
-    
-    const targetBoxSize = containerDims.width * 0.75; 
+
+    const targetBoxSize = containerDims.width * 0.75;
 
     let boxWidth, boxHeight;
     if (slotAspectRatio > 1) {
@@ -153,7 +153,7 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
       if (!ctx) return;
 
       const captureRatio = boxW / boxH;
-      canvas.width = 1200; 
+      canvas.width = 1200;
       canvas.height = Math.round(canvas.width / captureRatio);
 
       const img = new Image();
@@ -225,34 +225,34 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
       }
 
       // --- LOGIKA CLICKER ---
-      
+
       // 1. TOMBOL CAPTURE (Tengah/Start/B)
       // Biasanya remote kirim: Enter, Space, atau 'b' (black screen)
       if (['Enter', 'Space', 'KeyB'].includes(event.code)) {
         if (!currentCapturedPhoto && !isCapturing && !countdown) {
-           startCountdown();
+          startCountdown();
         }
       }
 
       // 2. TOMBOL NEXT (Kanan)
       // Biasanya remote kirim: ArrowRight, PageDown, atau 'n'
       if (['ArrowRight', 'PageDown', 'KeyN'].includes(event.code)) {
-         if (currentCapturedPhoto) {
-            // Kalau sudah foto terakhir, dia akan Finish. Kalau belum, Next Photo.
-            if (photoNumber < actualTotalPhotos) {
-                onNext();
-            } else {
-                onFinish();
-            }
-         }
+        if (currentCapturedPhoto) {
+          // Kalau sudah foto terakhir, dia akan Finish. Kalau belum, Next Photo.
+          if (photoNumber < actualTotalPhotos) {
+            onNext();
+          } else {
+            onFinish();
+          }
+        }
       }
 
       // 3. TOMBOL RETAKE (Kiri)
       // Biasanya remote kirim: ArrowLeft, PageUp, atau 'p'
       if (['ArrowLeft', 'PageUp', 'KeyP'].includes(event.code)) {
-         if (currentCapturedPhoto) {
-            onRetake();
-         }
+        if (currentCapturedPhoto) {
+          onRetake();
+        }
       }
     };
 
@@ -264,12 +264,12 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [
-    startCountdown, 
-    onNext, 
-    onFinish, 
-    onRetake, 
-    currentCapturedPhoto, 
-    isCapturing, 
+    startCountdown,
+    onNext,
+    onFinish,
+    onRetake,
+    currentCapturedPhoto,
+    isCapturing,
     countdown,
     photoNumber,
     actualTotalPhotos
@@ -277,14 +277,14 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
 
   // 8. RENDER UI (Dengan Layout Perbaikan)
   return (
-    <div 
-        className="h-full w-full flex flex-col lg:flex-row gap-4 p-4 lg:p-6 overflow-hidden relative font-sans"
-        style={{ color: 'var(--foreground)' }}
+    <div
+      className="h-full w-full flex flex-col lg:flex-row gap-4 p-4 lg:p-6 overflow-hidden relative font-sans"
+      style={{ color: 'var(--foreground)' }}
     >
-      
+
       {/* BAGIAN KIRI: CAMERA PREVIEW */}
       <div className="flex-1 flex flex-col items-center justify-center relative min-h-0 z-10">
-        
+
         {/* HEADER */}
         <div className="w-full max-w-2xl flex items-center justify-between mb-2 shrink-0">
           <div>
@@ -297,10 +297,10 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
           <button
             onClick={() => setMirrored(!mirrored)}
             className="flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs lg:text-sm font-medium backdrop-blur-md"
-            style={{ 
-                backgroundColor: 'rgba(128,128,128, 0.2)', 
-                borderColor: 'rgba(128,128,128, 0.3)',
-                color: 'var(--foreground)'
+            style={{
+              backgroundColor: 'rgba(128,128,128, 0.2)',
+              borderColor: 'rgba(128,128,128, 0.3)',
+              color: 'var(--foreground)'
             }}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -311,7 +311,7 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
         </div>
 
         {/* CONTAINER WEBCAM */}
-        <div 
+        <div
           ref={cameraContainerRef}
           className="relative w-full max-w-2xl aspect-[4/3] bg-black rounded-2xl overflow-hidden shadow-2xl border-[3px]"
           style={{ borderColor: 'rgba(128,128,128, 0.3)' }}
@@ -321,11 +321,11 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
               ref={webcamRef}
               audio={false}
               screenshotFormat="image/jpeg"
-              videoConstraints={{ 
+              videoConstraints={{
                 deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
-                facingMode: selectedDeviceId ? undefined : 'user', 
-                width: 1280, 
-                height: 720 
+                facingMode: selectedDeviceId ? undefined : 'user',
+                width: 1280,
+                height: 720
               }}
               mirrored={mirrored}
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
@@ -336,8 +336,8 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
           {currentSlot && !currentCapturedPhoto && (
             <>
               <div className="absolute inset-0 pointer-events-none z-[9]">
-                <div 
-                  className="absolute inset-0 bg-black/60" 
+                <div
+                  className="absolute inset-0 bg-black/60"
                   style={{
                     clipPath: `polygon(
                       0 0, 100% 0, 100% 100%, 0 100%, 0 0,
@@ -351,7 +351,7 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
                 />
               </div>
 
-              <div 
+              <div
                 className="absolute border-4 pointer-events-none z-10"
                 style={{
                   width: `${boundingBox.width}px`,
@@ -379,7 +379,7 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
 
           {currentCapturedPhoto && (
             <div className="absolute top-4 left-0 right-0 text-center z-20">
-              <span 
+              <span
                 className="text-white px-4 py-2 rounded-full font-bold text-sm shadow-lg inline-flex items-center gap-2"
                 style={{ backgroundColor: 'var(--primary-color)' }}
               >
@@ -401,25 +401,25 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
                 className="rounded-full w-16 h-16 lg:w-20 lg:h-20 p-0 bg-white hover:bg-slate-200 text-slate-900 shadow-[0_0_40px_-10px_rgba(255,255,255,0.4)] transition-transform hover:scale-105 active:scale-95 border-none"
               >
                 {isCapturing ? (
-                  <div 
-                    className="animate-spin w-8 h-8 lg:w-10 lg:h-10 border-4 border-slate-300 rounded-full" 
+                  <div
+                    className="animate-spin w-8 h-8 lg:w-10 lg:h-10 border-4 border-slate-300 rounded-full"
                     style={{ borderTopColor: 'var(--primary-color)' }}
                   />
                 ) : (
                   <div className="w-12 h-12 lg:w-16 lg:h-16 rounded-full border-[4px] border-slate-300 flex items-center justify-center group-hover:border-slate-400">
-                    <div 
-                        className="w-10 h-10 lg:w-12 lg:h-12 rounded-full shadow-inner" 
-                        style={{ backgroundColor: 'var(--primary-color)' }}
+                    <div
+                      className="w-10 h-10 lg:w-12 lg:h-12 rounded-full shadow-inner"
+                      style={{ backgroundColor: 'var(--primary-color)' }}
                     />
                   </div>
                 )}
               </Button>
-              <p 
+              <p
                 className="text-center text-xs lg:text-sm font-medium px-4 py-1.5 rounded-full backdrop-blur-md border"
-                style={{ 
-                    backgroundColor: 'rgba(128,128,128, 0.2)', 
-                    borderColor: 'rgba(128,128,128, 0.3)',
-                    color: 'var(--foreground)'
+                style={{
+                  backgroundColor: 'rgba(128,128,128, 0.2)',
+                  borderColor: 'rgba(128,128,128, 0.3)',
+                  color: 'var(--foreground)'
                 }}
               >
                 Press Space/Clicker to Capture
@@ -431,26 +431,26 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
 
       {/* --- BAGIAN KANAN: FRAME PREVIEW (Updated Layout) --- */}
       <div className="hidden lg:flex w-80 lg:w-96 flex-col justify-center shrink-0 z-10 pt-12">
-        <div 
-            className="backdrop-blur-md rounded-3xl shadow-2xl p-6 h-auto max-h-[90vh] flex flex-col border"
-            style={{ 
-                backgroundColor: 'rgba(128,128,128, 0.1)', 
-                borderColor: 'rgba(128,128,128, 0.2)' 
-            }}
+        <div
+          className="backdrop-blur-md rounded-3xl shadow-2xl p-6 h-auto max-h-[90vh] flex flex-col border"
+          style={{
+            backgroundColor: 'rgba(128,128,128, 0.1)',
+            borderColor: 'rgba(128,128,128, 0.2)'
+          }}
         >
           <div className="text-center mb-4 flex-shrink-0">
             <h3 className="text-lg font-bold tracking-tight" style={{ color: 'var(--foreground)' }}>Live Preview</h3>
             <p className="text-xs opacity-60">Your photos fit into the frame</p>
           </div>
 
-          <div 
+          <div
             className="flex-1 flex items-center justify-center overflow-hidden rounded-2xl p-4 border inner-shadow"
-            style={{ 
-                backgroundColor: 'rgba(0,0,0, 0.2)', 
-                borderColor: 'rgba(128,128,128, 0.2)' 
+            style={{
+              backgroundColor: 'rgba(0,0,0, 0.2)',
+              borderColor: 'rgba(128,128,128, 0.2)'
             }}
           >
-            <div 
+            <div
               className="relative bg-white shadow-lg transition-all duration-300"
               style={{
                 aspectRatio: `${frameAspectRatio}`,
@@ -461,26 +461,55 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
               }}
             >
               <div className="absolute inset-0 overflow-hidden">
-                {frame.photo_slots?.map((slot, index) => (
-                  <div
-                    key={slot.id}
-                    className="absolute transition-all duration-500"
-                    style={{
-                      left: `${slot.x}%`,
-                      top: `${slot.y}%`,
-                      width: `${slot.width}%`,
-                      height: `${slot.height}%`,
-                    }}
-                  >
-                    {capturedPhotos[index] && (
-                      <img 
-                        src={capturedPhotos[index]!} 
-                        alt={`Photo ${index + 1}`} 
-                        className="w-full h-full object-cover animate-in zoom-in duration-300"
-                      />
-                    )}
-                  </div>
-                ))}
+                {frame.photo_slots?.map((slot, index) => {
+                  // For double_strip layout (portrait), duplicate photos vertically
+                  // Slot mapping: 0->0, 1->0, 2->1, 3->1, 4->2, 5->2, 6->3, 7->3
+                  const isDoubleStrip = frame.frame_config?.layout === 'double_strip';
+
+                  // For double_strip_landscape, duplicate photos horizontally
+                  // Top row (slots 0-3) and bottom row (slots 4-7) show the same 4 photos
+                  // Slot mapping: 0->0, 1->1, 2->2, 3->3, 4->0, 5->1, 6->2, 7->3
+                  const isDoubleStripLandscape = frame.frame_config?.layout === 'double_strip_landscape';
+
+                  let photoIndex = index;
+
+                  if (isDoubleStrip) {
+                    // Calculate which photo should go in this slot
+                    // Row 0: slots 0,1 -> photo 0
+                    // Row 1: slots 2,3 -> photo 1
+                    // Row 2: slots 4,5 -> photo 2
+                    // Row 3: slots 6,7 -> photo 3
+                    photoIndex = Math.floor(index / 2);
+                  } else if (isDoubleStripLandscape) {
+                    // For landscape: slots 0-3 = photos 0-3, slots 4-7 = copy of photos 0-3
+                    // Slot 0->photo 0, 1->1, 2->2, 3->3
+                    // Slot 4->photo 0, 5->1, 6->2, 7->3
+                    photoIndex = index % 4;
+                  }
+
+                  const photoSrc = capturedPhotos[photoIndex];
+
+                  return (
+                    <div
+                      key={slot.id}
+                      className="absolute transition-all duration-500"
+                      style={{
+                        left: `${slot.x}%`,
+                        top: `${slot.y}%`,
+                        width: `${slot.width}%`,
+                        height: `${slot.height}%`,
+                      }}
+                    >
+                      {photoSrc && (
+                        <img
+                          src={photoSrc}
+                          alt={`Photo ${photoIndex + 1}`}
+                          className="w-full h-full object-cover animate-in zoom-in duration-300"
+                        />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
               <img src={frame.cloudinary_url} alt={frame.name} className="relative w-full h-full object-cover pointer-events-none z-10" />
             </div>
@@ -489,40 +518,40 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
           <div className="mt-6 flex-shrink-0">
             {currentCapturedPhoto && (
               <div className="space-y-3 animate-in slide-in-from-bottom-2">
-                
+
                 {/* RETAKE (Map ke tombol KIRI remote) */}
-                <Button 
-                    variant="secondary" 
-                    onClick={onRetake} 
-                    className="w-full shadow-sm border"
-                    style={{ 
-                        backgroundColor: 'rgba(128,128,128, 0.2)', 
-                        borderColor: 'rgba(128,128,128, 0.3)',
-                        color: 'var(--foreground)'
-                    }}
+                <Button
+                  variant="secondary"
+                  onClick={onRetake}
+                  className="w-full shadow-sm border"
+                  style={{
+                    backgroundColor: 'rgba(128,128,128, 0.2)',
+                    borderColor: 'rgba(128,128,128, 0.3)',
+                    color: 'var(--foreground)'
+                  }}
                 >
-                  Retake Photo 
+                  Retake Photo
                 </Button>
 
                 {photoNumber < actualTotalPhotos ? (
                   /* NEXT (Map ke tombol KANAN remote) */
-                  <Button 
-                    onClick={onNext} 
+                  <Button
+                    onClick={onNext}
                     className="w-full shadow-lg text-white"
-                    style={{ 
-                        backgroundColor: 'var(--primary-color)',
-                        color: 'var(--bg-color)' 
+                    style={{
+                      backgroundColor: 'var(--primary-color)',
+                      color: 'var(--bg-color)'
                     }}
                   >
-                    Next Photo 
+                    Next Photo
                   </Button>
                 ) : (
-                  <Button 
-                    onClick={onFinish} 
+                  <Button
+                    onClick={onFinish}
                     className="w-full text-white shadow-lg"
-                    style={{ 
-                        background: 'linear-gradient(to right, var(--primary-color), var(--secondary-color))',
-                        color: '#fff'
+                    style={{
+                      background: 'linear-gradient(to right, var(--primary-color), var(--secondary-color))',
+                      color: '#fff'
                     }}
                   >
                     Finish Session (→)
@@ -530,15 +559,15 @@ export const CameraPreview: React.FC<CameraPreviewProps> = ({
                 )}
               </div>
             )}
-            
+
             <div className="mt-6 flex justify-center gap-2">
               {Array.from({ length: actualTotalPhotos }).map((_, index) => (
-                <div 
-                    key={index} 
-                    className={`h-1.5 rounded-full transition-all duration-300 ${index === photoNumber - 1 || capturedPhotos[index] ? 'w-8' : 'w-1.5'}`} 
-                    style={{ 
-                        backgroundColor: capturedPhotos[index] ? 'var(--primary-color)' : index === photoNumber - 1 ? 'var(--secondary-color)' : 'rgba(128,128,128, 0.3)'
-                    }}
+                <div
+                  key={index}
+                  className={`h-1.5 rounded-full transition-all duration-300 ${index === photoNumber - 1 || capturedPhotos[index] ? 'w-8' : 'w-1.5'}`}
+                  style={{
+                    backgroundColor: capturedPhotos[index] ? 'var(--primary-color)' : index === photoNumber - 1 ? 'var(--secondary-color)' : 'rgba(128,128,128, 0.3)'
+                  }}
                 />
               ))}
             </div>

@@ -1,7 +1,7 @@
 // types/index.ts
 
 // Frame layout types
-export type FrameLayout = 'single' | 'vertical' | 'strip' | 'grid';
+export type FrameLayout = 'single' | 'vertical' | 'strip' | 'grid' | 'double_strip' | 'double_strip_landscape';
 
 // Frame configuration (preset-based)
 export interface FrameConfig {
@@ -19,7 +19,7 @@ export interface PhotoSlot {
   id: number;  // 1, 2, 3
   x: number;   // % from left (0-100)
   y: number;   // % from top (0-100)
-  width:  number;   // % of frame width (0-100)
+  width: number;   // % of frame width (0-100)
   height: number;  // % of frame height (0-100)
 }
 
@@ -31,7 +31,7 @@ export interface Frame {
   cloudinary_public_id: string;
   thumbnail_url: string | null;
   is_active: boolean;
-  photo_slots? :  PhotoSlot[] | null;  // Photo slot positions from admin
+  photo_slots?: PhotoSlot[] | null;  // Photo slot positions from admin
   frame_config?: FrameConfig | null;  // Preset configuration with locked aspect ratio
   created_at: string;
   updated_at: string;
@@ -42,7 +42,7 @@ export interface Frame {
 export interface PhotoData {
   url: string;
   public_id: string;
-  order:  number;
+  order: number;
 }
 
 // Photo session
@@ -56,9 +56,9 @@ export interface PhotoSession {
   composite_public_id: string | null;
   gif_url: string | null;
   gif_public_id: string | null;
-  photo_count:   number;
+  photo_count: number;
   files_deleted: boolean;
-  deleted_at:   string | null;
+  deleted_at: string | null;
 }
 
 // Cloudinary upload result
@@ -85,7 +85,7 @@ export interface ApiResponse<T = any> {
 export interface User {
   uid: string;
   email: string | null;
-  displayName? :  string | null;
+  displayName?: string | null;
 }
 
 export interface Event {
