@@ -1,11 +1,12 @@
 // components/admin/LoginForm.tsx
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
+import { TurnstileWidget } from '@/components/ui/TurnstileWidget';
 import { isValidEmail } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
@@ -23,6 +24,22 @@ export const LoginForm: React.FC = () => {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState('');
+
+  // Turnstile callbacks
+  const handleTurnstileVerify = useCallback((token: string) => {
+    setTurnstileToken(token);
+  }, []);
+
+  const handleTurnstileError = useCallback(() => {
+    setTurnstileToken('');
+    toast.error('Verifikasi CAPTCHA gagal. Silakan coba lagi.');
+  }, []);
+
+  const handleTurnstileExpire = useCallback(() => {
+    setTurnstileToken('');
+    toast.error('CAPTCHA expired. Silakan verifikasi ulang.');
+  }, []);
 
   const validateForm = (): boolean => {
     const newErrors = { email: '', password: '' };
@@ -31,7 +48,7 @@ export const LoginForm: React.FC = () => {
     if (!formData.email) {
       newErrors.email = 'Email is required';
       isValid = false;
-    } else if (!isValidEmail(formData. email)) {
+    } else if (!isValidEmail(formData.email)) {
       newErrors.email = 'Invalid email format';
       isValid = false;
     }
@@ -39,7 +56,7 @@ export const LoginForm: React.FC = () => {
     if (!formData.password) {
       newErrors.password = 'Password is required';
       isValid = false;
-    } else if (formData.password. length < 6) {
+    } else if (formData.password.length < 6) {
       newErrors.password = 'Password must be at least 6 characters';
       isValid = false;
     }
@@ -56,7 +73,7 @@ export const LoginForm: React.FC = () => {
     setLoading(true);
 
     try {
-      const { success, error } = await signIn(formData. email, formData.password);
+      const { success, error } = await signIn(formData.email, formData.password);
 
       if (success) {
         toast.success('Login successful!');
@@ -64,7 +81,7 @@ export const LoginForm: React.FC = () => {
       } else {
         toast.error(error || 'Login failed. Please check your credentials.');
       }
-    } catch (error:  any) {
+    } catch (error: any) {
       toast.error('An unexpected error occurred');
       console.error('Login error:', error);
     } finally {
@@ -72,7 +89,7 @@ export const LoginForm: React.FC = () => {
     }
   };
 
-  const handleChange = (e: React. ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     // Clear error when user starts typing
@@ -89,7 +106,7 @@ export const LoginForm: React.FC = () => {
           type="email"
           name="email"
           placeholder="admin@photobooth.local"
-          value={formData. email}
+          value={formData.email}
           onChange={handleChange}
           error={errors.email}
           disabled={loading}
@@ -104,7 +121,7 @@ export const LoginForm: React.FC = () => {
             type={showPassword ? 'text' : 'password'}
             name="password"
             placeholder="Enter your password"
-            value={formData. password}
+            value={formData.password}
             onChange={handleChange}
             error={errors.password}
             disabled={loading}
@@ -145,8 +162,21 @@ export const LoginForm: React.FC = () => {
         </div>
       </div>
 
-      <Button type="submit" className="w-full" isLoading={loading} disabled={loading}>
-        {loading ? 'Signing in...' : 'Sign In'}
+      {/* Turnstile CAPTCHA */}
+      <TurnstileWidget
+        onVerify={handleTurnstileVerify}
+        onError={handleTurnstileError}
+        onExpire={handleTurnstileExpire}
+        theme="light"
+      />
+
+      <Button
+        type="submit"
+        className="w-full"
+        isLoading={loading}
+        disabled={loading || !turnstileToken}
+      >
+        {loading ? 'Signing in...' : !turnstileToken ? 'Selesaikan CAPTCHA dulu' : 'Sign In'}
       </Button>
     </form>
   );

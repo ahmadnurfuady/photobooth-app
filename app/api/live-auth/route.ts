@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { verifyTurnstileToken } from '@/lib/turnstile';
 
 // Pastikan menggunakan SERVICE ROLE KEY
 const supabaseAdmin = createClient(
@@ -10,7 +11,7 @@ const supabaseAdmin = createClient(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { mode, event_id, input_pin } = body;
+    const { mode, event_id, input_pin, turnstile_token } = body;
 
     console.log(`[AUTH API] Mode: ${mode}, EventID: ${event_id}`);
 
@@ -33,6 +34,19 @@ export async function POST(request: NextRequest) {
 
     // MODE 2: VERIFIKASI PIN
     if (mode === 'verify') {
+      // 🔐 VERIFY CAPTCHA FIRST
+      if (!turnstile_token) {
+        console.log("❌ [AUTH] No Turnstile token provided");
+        return NextResponse.json({ valid: false, error: 'Verifikasi CAPTCHA diperlukan' });
+      }
+
+      const isCaptchaValid = await verifyTurnstileToken(turnstile_token);
+      if (!isCaptchaValid) {
+        console.log("❌ [AUTH] Turnstile verification failed");
+        return NextResponse.json({ valid: false, error: 'Verifikasi CAPTCHA gagal' });
+      }
+      console.log("✅ [AUTH] Turnstile verification passed");
+
       const { data, error } = await supabaseAdmin
         .from('events')
         .select('pin')
@@ -46,9 +60,9 @@ export async function POST(request: NextRequest) {
 
       // --- DEBUGGING (CONTEKAN) ---
       // Lihat terminal VSCode Anda saat login, PIN asli akan muncul di sana
-      console.log("🔍 [DEBUG PIN]", { 
-          PIN_DATABASE: data.pin, 
-          PIN_INPUT_USER: input_pin 
+      console.log("🔍 [DEBUG PIN]", {
+        PIN_DATABASE: data.pin,
+        PIN_INPUT_USER: input_pin
       });
 
       // Normalisasi: Ubah ke String dan Hapus Spasi depan/belakang
@@ -57,13 +71,13 @@ export async function POST(request: NextRequest) {
 
       // Bandingkan
       const isValid = dbPin === userPin;
-      
+
       if (isValid) {
-          console.log("✅ LOGIN SUKSES");
+        console.log("✅ LOGIN SUKSES");
       } else {
-          console.log("❌ PIN TIDAK COCOK");
+        console.log("❌ PIN TIDAK COCOK");
       }
-      
+
       return NextResponse.json({ valid: isValid });
     }
 
